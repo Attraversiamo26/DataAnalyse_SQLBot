@@ -1,0 +1,2 @@
+class CustomPromptTypeEnum:
+    pass
