@@ -1,6 +1,6 @@
 <template>
   <div class="report-container">
-    <el-card class="report-card">
+    <el-card class="report-card" fullscreen>
       <template #header>
         <div class="card-header">
           <span>报告生成</span>
@@ -789,11 +789,16 @@ onMounted(async () => {
 <style scoped>
 .report-container {
   padding: 20px;
+  width: 100%;
+  height: calc(100vh - 60px);
+  overflow: hidden;
 }
 
 .report-card {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .card-header {
@@ -878,6 +883,13 @@ onMounted(async () => {
   margin-top: 20px;
   display: flex;
   gap: 12px;
+}
+
+/* 卡片内容区域 */
+:deep(.el-card__body) {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
 }
 
 /* 会话列表 */
