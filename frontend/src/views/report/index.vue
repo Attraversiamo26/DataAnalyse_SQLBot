@@ -73,7 +73,7 @@
               {{ isGeneratingQuestions ? '生成中...' : '生成问题列表' }}
             </el-button>
             <el-button 
-              type="success" 
+              class="custom-green-btn"
               @click="generateReportFromTemplate" 
               :loading="isGeneratingReport"
               :disabled="selectedQuestions.length === 0"
@@ -131,7 +131,7 @@
                     <div class="table-operate">
                       <el-button 
                         size="small" 
-                        type="success" 
+                        class="custom-green-btn"
                         @click="viewChatDetail(scope.row)"
                         style="margin-right: 8px;"
                       >
@@ -155,7 +155,7 @@
         <!-- 操作按钮 -->
         <div class="chat-actions">
           <el-button 
-            type="success" 
+            class="custom-green-btn"
             @click="generateReportFromChats" 
             :loading="isGeneratingReport"
             :disabled="selectedChatRecords.length === 0"
@@ -933,6 +933,29 @@ onMounted(async () => {
   border-top: 1px solid #ebeef5;
   margin-top: 16px;
   z-index: 10;
+}
+
+/* 自定义绿色按钮 */
+.custom-green-btn {
+  background-color: #006633 !important;
+  border-color: #006633 !important;
+  color: #ffffff !important;
+}
+
+.custom-green-btn:hover {
+  background-color: #005528 !important;
+  border-color: #005528 !important;
+}
+
+.custom-green-btn:active {
+  background-color: #004420 !important;
+  border-color: #004420 !important;
+}
+
+.custom-green-btn:disabled {
+  background-color: #a8d9bc !important;
+  border-color: #a8d9bc !important;
+  color: #ffffff !important;
 }
 
 /* 生成的报告 */
