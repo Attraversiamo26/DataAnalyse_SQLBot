@@ -98,15 +98,15 @@
             @selection-change="handleChatSelectionChange"
             border
           >
-            <el-table-column type="selection" width="55" />
-            <el-table-column prop="tool" label="工具类型" width="100">
+            <el-table-column type="selection" width="55" fixed="left" />
+            <el-table-column prop="tool" label="工具类型" width="100" fixed="left">
               <template #default="scope">
                 <el-tag :type="scope.row.tool === 'chat' ? 'primary' : 'success'">
                   {{ scope.row.tool === 'chat' ? '智能问数' : '数据分析' }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="question" label="问题" min-width="250" show-overflow-tooltip />
+            <el-table-column prop="question" label="问题" width="300" fixed="left" show-overflow-tooltip />
             <el-table-column prop="datasource_name" label="数据源" width="150" />
             <el-table-column prop="create_time" label="创建时间" width="180" />
             <el-table-column prop="finish_time" label="结束时间" width="180" />
@@ -124,7 +124,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="180">
+            <el-table-column label="操作" width="180" fixed="right">
               <template #default="scope">
                 <div class="table-operate">
                   <el-button 
