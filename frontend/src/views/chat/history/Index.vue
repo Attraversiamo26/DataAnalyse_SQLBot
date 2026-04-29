@@ -733,24 +733,68 @@ onMounted(() => {
 }
 
 .dialog-section {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   
   h3 {
-    margin-bottom: 12px;
+    margin-bottom: 20px;
     font-size: 16px;
     font-weight: 600;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #ebeef5;
   }
 }
 
 .analysis-content,
 .analysis-report {
-  margin-bottom: 20px;
+  margin-top: 24px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: #fafafa;
+  border-radius: 8px;
   
   h4 {
-    margin-bottom: 8px;
+    margin-bottom: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #303133;
+  }
+}
+
+.analysis-data {
+  margin-top: 16px;
+}
+
+.correlation-result,
+.descriptive-result,
+.clusters-result,
+.regression-result,
+.anomaly-result,
+.distribution-result,
+.trend-result,
+.timeseries-result {
+  margin-bottom: 20px;
+  padding: 16px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  
+  h4 {
+    margin-bottom: 16px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #303133;
+  }
+  
+  h5 {
+    margin-bottom: 12px;
     font-size: 14px;
     font-weight: 500;
+    color: #606266;
   }
+}
+
+.chart-container {
+  margin-top: 16px;
+  margin-bottom: 8px;
 }
 
 .markdown-content {
