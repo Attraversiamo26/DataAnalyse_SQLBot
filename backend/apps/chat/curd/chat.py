@@ -191,6 +191,16 @@ def format_json_data(origin_data: dict):
     data = format_json_list_data(_list)
     result['data'] = data
 
+    # 保留数据分析相关的字段（图表、分析结果等）
+    analysis_fields = [
+        'charts', 'correlation_matrix', 'stats', 'clusters', 
+        'regression', 'anomalies', 'distributions', 'trends', 
+        'time_series', 'analysis_type', 'columns'
+    ]
+    for field in analysis_fields:
+        if field in origin_data:
+            result[field] = origin_data[field]
+
     return result
 
 
@@ -305,7 +315,7 @@ dynamic_ds_types = [1, 3]
 
 
 def get_chat_with_records(session: SessionDep, chart_id: int, current_user: CurrentUser,
-                          current_assistant: CurrentAssistant, with_data: bool = False,
+                          current_assistant: CurrentAssistant, with_data: bool = True,
                           trans: Trans = None) -> ChatInfo:
     chat = session.get(Chat, chart_id)
     if not chat:
@@ -339,7 +349,7 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
                    ChatRecord.datasource_select_answer, ChatRecord.analysis_record_id, ChatRecord.predict_record_id,
                    ChatRecord.regenerate_record_id,
                    ChatRecord.recommended_question, ChatRecord.first_chat,
-                   ChatRecord.finish, ChatRecord.error,
+                   ChatRecord.finish, ChatRecord.error, ChatRecord.data, ChatRecord.predict_data,
                    sql_alias_log.reasoning_content.label('sql_reasoning_content'),
                    chart_alias_log.reasoning_content.label('chart_reasoning_content'),
                    analysis_alias_log.reasoning_content.label('analysis_reasoning_content'),
@@ -359,16 +369,6 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
                                        predict_alias_log.operate == OperationEnum.PREDICT_DATA))
     .where(and_(ChatRecord.create_by == current_user.id, ChatRecord.chat_id == chart_id)).order_by(
         ChatRecord.create_time))
-    if with_data:
-        stmt = select(ChatRecord.id, ChatRecord.chat_id, ChatRecord.create_time, ChatRecord.finish_time,
-                      ChatRecord.question, ChatRecord.sql_answer, ChatRecord.sql,ChatRecord.datasource,
-                      ChatRecord.chart_answer, ChatRecord.chart, ChatRecord.analysis, ChatRecord.predict,
-                      ChatRecord.datasource_select_answer, ChatRecord.analysis_record_id, ChatRecord.predict_record_id,
-                      ChatRecord.regenerate_record_id,
-                      ChatRecord.recommended_question, ChatRecord.first_chat,
-                      ChatRecord.finish, ChatRecord.error, ChatRecord.data, ChatRecord.predict_data).where(
-            and_(ChatRecord.create_by == current_user.id, ChatRecord.chat_id == chart_id)).order_by(
-            ChatRecord.create_time)
 
     result = session.execute(stmt).all()
     record_list: list[ChatRecordResult] = []
@@ -421,39 +421,23 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
         # 获取token总消耗
         total_tokens = token_usage_map.get(row.id, 0)
 
-        if not with_data:
-            record_list.append(
-                ChatRecordResult(id=row.id, chat_id=row.chat_id, create_time=row.create_time,
-                                 finish_time=row.finish_time,
-                                 duration=duration,
-                                 total_tokens=total_tokens,
-                                 question=row.question, sql_answer=row.sql_answer, sql=row.sql, datasource=row.datasource,
-                                 chart_answer=row.chart_answer, chart=row.chart,
-                                 analysis=row.analysis, predict=row.predict,
-                                 datasource_select_answer=row.datasource_select_answer,
-                                 analysis_record_id=row.analysis_record_id, predict_record_id=row.predict_record_id,
-                                 regenerate_record_id=row.regenerate_record_id,
-                                 recommended_question=row.recommended_question, first_chat=row.first_chat,
-                                 finish=row.finish, error=row.error,
-                                 sql_reasoning_content=row.sql_reasoning_content,
-                                 chart_reasoning_content=row.chart_reasoning_content,
-                                 analysis_reasoning_content=row.analysis_reasoning_content,
-                                 predict_reasoning_content=row.predict_reasoning_content,
-                                 ))
-        else:
-            record_list.append(
-                ChatRecordResult(id=row.id, chat_id=row.chat_id, create_time=row.create_time,
-                                 finish_time=row.finish_time,
-                                 duration=duration,
-                                 total_tokens=total_tokens,
-                                 question=row.question, sql_answer=row.sql_answer, sql=row.sql, datasource=row.datasource,
-                                 chart_answer=row.chart_answer, chart=row.chart,
-                                 analysis=row.analysis, predict=row.predict,
-                                 datasource_select_answer=row.datasource_select_answer,
-                                 analysis_record_id=row.analysis_record_id, predict_record_id=row.predict_record_id,
-                                 regenerate_record_id=row.regenerate_record_id,
-                                 recommended_question=row.recommended_question, first_chat=row.first_chat,
-                                 finish=row.finish, error=row.error, data=row.data, predict_data=row.predict_data))
+        record_list.append(
+            ChatRecordResult(id=row.id, chat_id=row.chat_id, create_time=row.create_time,
+                             finish_time=row.finish_time,
+                             duration=duration,
+                             total_tokens=total_tokens,
+                             question=row.question, sql_answer=row.sql_answer, sql=row.sql, datasource=row.datasource,
+                             chart_answer=row.chart_answer, chart=row.chart,
+                             analysis=row.analysis, predict=row.predict,
+                             datasource_select_answer=row.datasource_select_answer,
+                             analysis_record_id=row.analysis_record_id, predict_record_id=row.predict_record_id,
+                             regenerate_record_id=row.regenerate_record_id,
+                             recommended_question=row.recommended_question, first_chat=row.first_chat,
+                             finish=row.finish, error=row.error, data=row.data, predict_data=row.predict_data,
+                             sql_reasoning_content=row.sql_reasoning_content,
+                             chart_reasoning_content=row.chart_reasoning_content,
+                             analysis_reasoning_content=row.analysis_reasoning_content,
+                             predict_reasoning_content=row.predict_reasoning_content))
 
     result = list(map(format_record, record_list))
 
@@ -461,8 +445,17 @@ def get_chat_with_records(session: SessionDep, chart_id: int, current_user: Curr
         try:
             data_value = row.get('data')
             if data_value is not None:
-                row['data'] = format_json_data(data_value)
-        except Exception:
+                # 如果 data_value 是字符串，先解析为 JSON
+                if isinstance(data_value, str):
+                    import json
+                    data_value = json.loads(data_value)
+                # 格式化数据，保留完整的分析结果（包括图表、分析数据等）
+                formatted_data = format_json_data(data_value)
+                # 对于数据分析类型的会话，保留完整的格式化结果
+                # 对于智能问数类型的会话，只返回数据数组
+                row['data'] = formatted_data
+        except Exception as e:
+            print(f"Error formatting data: {e}")
             pass
 
     chat_info.records = result
@@ -708,6 +701,7 @@ def create_chat(session: SessionDep, current_user: CurrentUser, create_chat_obj:
                 create_by=current_user.id,
                 oid=current_user.oid if current_user.oid is not None else 1,
                 brief=create_chat_obj.question.strip()[:20],
+                chat_type=create_chat_obj.chat_type if create_chat_obj.chat_type is not None else "chat",
                 origin=create_chat_obj.origin if create_chat_obj.origin is not None else 0)
     ds: CoreDatasource | AssistantOutDsSchema | None = None
     if create_chat_obj.datasource:
@@ -820,15 +814,11 @@ def save_analysis_predict_record(session: SessionDep, base_record: ChatRecord, a
     elif action_type == 'predict':
         record.predict_record_id = base_record.id
 
-    result = ChatRecord(**record.model_dump())
-
     session.add(record)
     session.flush()
     session.refresh(record)
-    result.id = record.id
-    session.commit()
-
-    return result
+    
+    return record
 
 
 def start_log(session: SessionDep, ai_modal_id: int = None, ai_modal_name: str = None, operate: OperationEnum = None,

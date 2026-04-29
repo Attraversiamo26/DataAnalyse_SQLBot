@@ -277,7 +277,21 @@ class HttpService {
           errorMessage = `Server responded with error: ${error.response.status}`
       }
       if (error?.response?.data) {
-        errorMessage = error.response.data.toString()
+        // 安全地处理 error.response.data，可能是对象、字符串或其他类型
+        const responseData = error.response.data as Record<string, any>
+        if (typeof responseData === 'string') {
+          errorMessage = responseData
+        } else if (responseData.detail) {
+          errorMessage = responseData.detail
+        } else if (responseData.message) {
+          errorMessage = responseData.message
+        } else {
+          try {
+            errorMessage = JSON.stringify(responseData)
+          } catch {
+            errorMessage = 'Unknown error format'
+          }
+        }
       }
     } else if (error.request) {
       errorMessage = 'No response from server'
@@ -406,9 +420,7 @@ class HttpService {
     formData.append(fieldName, file)
 
     return this.post(url, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: {}, // 不要手动设置 Content-Type，让浏览器自动处理
       ...config,
     })
   }

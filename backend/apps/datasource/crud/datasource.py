@@ -306,13 +306,13 @@ def preview(session: SessionDep, current_user: CurrentUser, id: int, data: Table
 
     # ignore data's fields param, query fields from database
     if not data.table.id:
-        return {"fields": [], "data": [], "sql": ''}
+        return {"fields": [], "data": [], "rows": 0, "sql": ''}
 
     fields = session.query(CoreField).filter(CoreField.table_id == data.table.id).order_by(
         CoreField.field_index.asc()).all()
 
     if fields is None or len(fields) == 0:
-        return {"fields": [], "data": [], "sql": ''}
+        return {"fields": [], "data": [], "rows": 0, "sql": ''}
 
     where = ''
     f_list = [f for f in fields if f.checked]
@@ -332,48 +332,101 @@ def preview(session: SessionDep, current_user: CurrentUser, id: int, data: Table
             where_str = mapping_dict.get('filter')
         where = (' where ' + where_str) if where_str is not None and where_str != '' else ''
 
-    fields = [f.field_name for f in f_list]
+    # 直接使用 SELECT * 而不是手动指定字段，保持原始字段顺序
     if fields is None or len(fields) == 0:
-        return {"fields": [], "data": [], "sql": ''}
+        return {"fields": [], "data": [], "rows": 0, "sql": ''}
 
     conf = DatasourceConf(**json.loads(aes_decrypt(ds.configuration))) if ds.type != "excel" else get_engine_config()
+    
+    # 获取全量数据行数
+    count_sql: str = ""
+    if ds.type == "mysql" or ds.type == "doris" or ds.type == "starrocks":
+        count_sql = f"""SELECT COUNT(*) as count FROM `{data.table.table_name}` {where}"""
+    elif ds.type == "sqlServer":
+        count_sql = f"""SELECT COUNT(*) as count FROM [{conf.dbSchema}].[{data.table.table_name}] {where}"""
+    elif ds.type == "pg" or ds.type == "excel" or ds.type == "redshift" or ds.type == "kingbase":
+        count_sql = f"""SELECT COUNT(*) as count FROM "{conf.dbSchema}"."{data.table.table_name}" {where}"""
+    elif ds.type == "oracle":
+        count_sql = f"""SELECT COUNT(*) as count FROM "{conf.dbSchema}"."{data.table.table_name}" {where}"""
+    elif ds.type == "ck":
+        count_sql = f"""SELECT COUNT(*) as count FROM "{data.table.table_name}" {where}"""
+    elif ds.type == "dm":
+        count_sql = f"""SELECT COUNT(*) as count FROM "{conf.dbSchema}"."{data.table.table_name}" {where}"""
+    elif ds.type == "es":
+        count_sql = f"""SELECT COUNT(*) as count FROM "{data.table.table_name}" {where}"""
+    
+    # 执行 COUNT 查询
+    total_rows = 0
+    try:
+        count_result = exec_sql(ds, count_sql, True)
+        if count_result.get('data') and len(count_result.get('data')) > 0:
+            count_value = count_result.get('data')[0].get('count', 0)
+            # 确保 total_rows 是整数
+            total_rows = int(count_value) if count_value is not None else 0
+            print(f"[DEBUG] 计算的全量行数: {total_rows}")
+    except Exception as e:
+        print(f"Count query failed: {e}")
+    
+    # 获取预览数据（只显示前5行），使用 SELECT * 保持原始字段顺序
     sql: str = ""
     if ds.type == "mysql" or ds.type == "doris" or ds.type == "starrocks":
-        sql = f"""SELECT `{"`, `".join(fields)}` FROM `{data.table.table_name}` 
+        sql = f"""SELECT * FROM `{data.table.table_name}` 
             {where} 
-            LIMIT 100"""
+            LIMIT 5"""
     elif ds.type == "sqlServer":
-        sql = f"""SELECT TOP 100 [{"], [".join(fields)}] FROM [{conf.dbSchema}].[{data.table.table_name}]
+        sql = f"""SELECT TOP 5 * FROM [{conf.dbSchema}].[{data.table.table_name}]
             {where} 
             """
     elif ds.type == "pg" or ds.type == "excel" or ds.type == "redshift" or ds.type == "kingbase":
-        sql = f"""SELECT "{'", "'.join(fields)}" FROM "{conf.dbSchema}"."{data.table.table_name}" 
+        sql = f"""SELECT * FROM "{conf.dbSchema}"."{data.table.table_name}" 
             {where} 
-            LIMIT 100"""
+            LIMIT 5"""
     elif ds.type == "oracle":
-        # sql = f"""SELECT "{'", "'.join(fields)}" FROM "{conf.dbSchema}"."{data.table.table_name}"
-        #     {where}
-        #     ORDER BY "{fields[0]}"
-        #     OFFSET 0 ROWS FETCH NEXT 100 ROWS ONLY"""
         sql = f"""SELECT * FROM
-                    (SELECT "{'", "'.join(fields)}" FROM "{conf.dbSchema}"."{data.table.table_name}"
+                    (SELECT * FROM "{conf.dbSchema}"."{data.table.table_name}"
                     {where} 
-                    ORDER BY "{fields[0]}")
-                    WHERE ROWNUM <= 100
+                    )
+                    WHERE ROWNUM <= 5
                     """
     elif ds.type == "ck":
-        sql = f"""SELECT "{'", "'.join(fields)}" FROM "{data.table.table_name}" 
+        sql = f"""SELECT * FROM "{data.table.table_name}" 
             {where} 
-            LIMIT 100"""
+            LIMIT 5"""
     elif ds.type == "dm":
-        sql = f"""SELECT "{'", "'.join(fields)}" FROM "{conf.dbSchema}"."{data.table.table_name}" 
+        sql = f"""SELECT * FROM "{conf.dbSchema}"."{data.table.table_name}" 
             {where} 
-            LIMIT 100"""
+            LIMIT 5"""
     elif ds.type == "es":
-        sql = f"""SELECT "{'", "'.join(fields)}" FROM "{data.table.table_name}" 
+        sql = f"""SELECT * FROM "{data.table.table_name}" 
             {where} 
-            LIMIT 100"""
-    return exec_sql(ds, sql, True)
+            LIMIT 5"""
+    
+    print(f"[DEBUG] 预览SQL: {sql}")
+    print(f"[DEBUG] 数据源ID: {ds.id}, 表名: {data.table.table_name}")
+    print(f"[DEBUG] 全量数据行数: {total_rows}")
+    
+    preview_result = exec_sql(ds, sql, True)
+    print(f"[DEBUG] 预览结果: {preview_result}")
+    
+    # 确保返回结果包含 rows 字段
+    if not isinstance(preview_result, dict):
+        preview_result = {}
+    
+    # 确保数据格式正确
+    if 'data' not in preview_result:
+        preview_result['data'] = []
+    if 'fields' not in preview_result:
+        preview_result['fields'] = []
+    if 'sql' not in preview_result:
+        preview_result['sql'] = ''
+    
+    # 设置真实的全量数据行数
+    preview_result['rows'] = total_rows
+    print(f"[DEBUG] 最终返回结果: {preview_result}")
+    print(f"[DEBUG] 返回结果类型: {type(preview_result)}")
+    print(f"[DEBUG] 返回结果包含 rows: {'rows' in preview_result}")
+    print(f"[DEBUG] rows 值: {preview_result.get('rows')}")
+    return preview_result
 
 
 def fieldEnum(session: SessionDep, id: int):

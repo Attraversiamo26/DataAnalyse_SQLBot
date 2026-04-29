@@ -5,59 +5,59 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
-import type { PropType } from 'vue';
-import { Chart } from '@antv/g2';
+import { ref, onMounted, watch } from 'vue'
+import type { PropType } from 'vue'
+import { Chart } from '@antv/g2'
 
 const props = defineProps({
   data: {
     type: Array as PropType<any[]>,
-    default: () => []
+    default: () => [],
   },
   chartType: {
     type: String as PropType<'bar' | 'line' | 'scatter' | 'pie' | 'heatmap'>,
-    default: 'bar'
+    default: 'bar',
   },
   xField: {
     type: String,
-    default: 'x'
+    default: 'x',
   },
   yField: {
     type: String,
-    default: 'y'
+    default: 'y',
   },
   title: {
     type: String,
-    default: ''
-  }
-});
+    default: '',
+  },
+})
 
-const chartRef = ref<HTMLElement | null>(null);
-let chart: Chart | null = null;
+const chartRef = ref<HTMLElement | null>(null)
+let chart: Chart | null = null
 
 const createChart = () => {
-  if (!chartRef.value) return;
-  
+  if (!chartRef.value) return
+
   // 销毁旧图表
   if (chart) {
-    chart.destroy();
+    chart.destroy()
   }
-  
+
   // 创建新图表
   chart = new Chart({
     container: chartRef.value,
     width: chartRef.value.clientWidth,
-    height: 400
-  });
-  
+    height: 400,
+  })
+
   // 设置数据
-  chart.data(props.data);
-  
+  chart.data(props.data)
+
   // 设置标题
   if (props.title) {
-    chart.title(props.title);
+    chart.title(props.title)
   }
-  
+
   // 根据图表类型设置配置
   switch (props.chartType) {
     case 'bar':
@@ -65,67 +65,75 @@ const createChart = () => {
         .interval()
         .encode('x', props.xField)
         .encode('y', props.yField)
-        .encode('color', props.xField);
-      break;
+        .encode('color', props.xField)
+      break
     case 'line':
-      chart
-        .line()
-        .encode('x', props.xField)
-        .encode('y', props.yField)
-        .encode('color', props.xField);
-      break;
+      chart.line().encode('x', props.xField).encode('y', props.yField).encode('color', props.xField)
+      break
     case 'scatter':
       chart
         .point()
         .encode('x', props.xField)
         .encode('y', props.yField)
-        .encode('color', props.xField);
-      break;
+        .encode('color', props.xField)
+      break
     case 'pie':
       chart
         .interval()
         .encode('x', props.xField)
         .encode('y', props.yField)
         .encode('color', props.xField)
-        .label({ text: (datum: any) => datum[props.xField] });
+        .label({ text: (datum: any) => datum[props.xField] })
       // 饼图使用默认配置
-      break;
+      break
     case 'heatmap':
-      chart
-        .rect()
-        .encode('x', props.xField)
-        .encode('y', props.yField)
-        .encode('color', props.yField);
-      break;
+      chart.rect().encode('x', props.xField).encode('y', props.yField).encode('color', props.yField)
+      break
   }
-  
+
   // 渲染图表
-  chart.render();
-};
+  chart.render()
+}
 
 onMounted(() => {
-  createChart();
-});
+  createChart()
+})
 
-watch(() => props.data, () => {
-  createChart();
-}, { deep: true });
+watch(
+  () => props.data,
+  () => {
+    createChart()
+  },
+  { deep: true }
+)
 
-watch(() => props.chartType, () => {
-  createChart();
-});
+watch(
+  () => props.chartType,
+  () => {
+    createChart()
+  }
+)
 
-watch(() => props.xField, () => {
-  createChart();
-});
+watch(
+  () => props.xField,
+  () => {
+    createChart()
+  }
+)
 
-watch(() => props.yField, () => {
-  createChart();
-});
+watch(
+  () => props.yField,
+  () => {
+    createChart()
+  }
+)
 
-watch(() => props.title, () => {
-  createChart();
-});
+watch(
+  () => props.title,
+  () => {
+    createChart()
+  }
+)
 </script>
 
 <style scoped>

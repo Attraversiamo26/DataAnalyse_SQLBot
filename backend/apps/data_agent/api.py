@@ -2,7 +2,7 @@ import time
 import pandas as pd
 import json
 import numpy as np
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, File, UploadFile
 from sqlalchemy import text
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
@@ -10,7 +10,16 @@ from typing import Optional, Dict, Any, List
 # 辅助函数：将numpy类型转换为Python原生类型
 def convert_numpy_types(obj):
     import pandas as pd
-    if isinstance(obj, (np.integer, np.int64)):
+    import math
+    # 优先处理NaN值
+    if obj is None:
+        return None
+    elif isinstance(obj, float) and math.isnan(obj):
+        return None
+    elif hasattr(obj, 'dtype') and np.issubdtype(obj.dtype, np.floating) and np.isnan(obj):
+        return None
+    # 处理数值类型
+    elif isinstance(obj, (np.integer, np.int64)):
         return int(obj)
     elif isinstance(obj, (np.floating, np.float64)):
         return float(obj)
@@ -49,8 +58,103 @@ from apps.system.models.user import UserModel as User
 from apps.datasource.models.datasource import CoreDatasource, CoreTable
 from apps.db.db import get_schema, get_engine
 from apps.db.engine import get_engine_conn
+from apps.datasource.crud.datasource import get_table_schema
+
+# 导入术语配置相关模块
+from apps.terminology.curd.terminology import get_terminology_template
+
+# 导入会话相关模块
+from apps.chat.models.chat_model import ChatRecord, Chat, CreateChat, ChatInfo, ChatQuestion
+from apps.chat.curd.chat import save_analysis_predict_record, create_chat, save_question
 
 router = APIRouter()
+
+# 添加datetime导入（如果还没有的话）
+from datetime import datetime
+
+def create_analysis_chat_record(db, current_user, request, result_data, report, python_code=None):
+    """
+    创建数据分析的会话记录
+    
+    参数：
+        db: 数据库会话
+        current_user: 当前用户
+        request: 数据分析请求
+        result_data: 分析结果数据
+        report: 分析报告
+        python_code: 分析代码（可选）
+    
+    返回：
+        chat_id: 会话ID（如果创建成功）
+    """
+    try:
+        # 只有提供了数据源ID才创建会话记录
+        if not request.datasource_id:
+            print("没有提供数据源ID，跳过会话记录创建")
+            return None
+        
+        print(f"create_analysis_chat_record: datasource_id={request.datasource_id}, query={request.query[:30]}")
+        
+        chat_id = None
+        
+        # 检查是否已有会话ID（同一对话中的后续问题）
+        if hasattr(request, 'chat_id') and request.chat_id:
+            # 使用现有会话
+            chat_id = request.chat_id
+            print(f"使用现有会话ID: {chat_id}")
+        else:
+            # 创建新会话 - 使用 "analysis" 类型与智能问数区分
+            create_chat_data = CreateChat(
+                question=request.query,
+                datasource=request.datasource_id,
+                origin=0,  # 从页面直接使用
+                chat_type="analysis"
+            )
+            chat_info = create_chat(db, current_user, create_chat_data)
+            chat_id = chat_info.id
+            print(f"创建新会话ID: {chat_id}")
+        
+        # 创建问题记录
+        chat_question = ChatQuestion(
+            chat_id=chat_id,
+            question=request.query
+        )
+        base_record = save_question(db, current_user, chat_question)
+        
+        # 创建分析记录
+        analysis_record = ChatRecord()
+        analysis_record.question = base_record.question
+        analysis_record.chat_id = base_record.chat_id
+        analysis_record.datasource = base_record.datasource
+        analysis_record.engine_type = base_record.engine_type
+        analysis_record.ai_modal_id = base_record.ai_modal_id
+        analysis_record.create_time = datetime.now()
+        analysis_record.create_by = base_record.create_by
+        analysis_record.chart = base_record.chart
+        analysis_record.data = result_data
+        analysis_record.analysis_record_id = base_record.id
+        analysis_record.sql = python_code  # 保存分析代码
+        
+        # 保存分析报告
+        analysis_answer = json.dumps({"content": report}, ensure_ascii=False)
+        analysis_record.analysis = analysis_answer
+        analysis_record.finish = True
+        analysis_record.finish_time = datetime.now()
+        
+        # 添加到会话并提交
+        db.add(analysis_record)
+        db.flush()
+        db.refresh(analysis_record)
+        db.commit()
+        
+        print(f"数据分析会话记录已创建，ID: {analysis_record.id}，Chat ID: {chat_id}，Chat Type: analysis")
+        return chat_id
+        
+    except Exception as e:
+        import traceback
+        print(f"创建会话记录失败: {str(e)}")
+        print(f"异常堆栈: {traceback.format_exc()}")
+        return None
 
 class DataBasicStatsRequest(BaseModel):
     """数据基本统计请求"""
@@ -91,7 +195,7 @@ class AnalysisRequirementResponse(BaseModel):
 class DataAnalysisRequest(BaseModel):
     """数据分析请求"""
     query: str
-    data: str
+    data: Optional[str] = None
     requirements: Optional[str] = ""
     name: Optional[str] = None
     description: Optional[str] = None
@@ -100,6 +204,7 @@ class DataAnalysisRequest(BaseModel):
     table_name: Optional[str] = None
     analysis_type: Optional[str] = None
     selected_columns: Optional[List[str]] = None
+    chat_id: Optional[int] = None  # 可选的会话ID，用于同一对话中的后续问题
 
 class DataAnalysisResponse(BaseModel):
     """数据分析响应"""
@@ -108,6 +213,7 @@ class DataAnalysisResponse(BaseModel):
     error: Optional[str] = None
     report: Optional[str] = None
     analysis_id: Optional[int] = None
+    chat_id: Optional[int] = None  # 会话ID，用于同一对话中的后续问题
 
 class ReportGenerationRequest(BaseModel):
     """报告生成请求"""
@@ -127,6 +233,38 @@ class ReportCreateRequest(BaseModel):
     template_id: Optional[int] = None
     analysis_result_ids: Optional[List[int]] = None
     chat_record_ids: Optional[List[int]] = None
+
+class TemplateUploadResponse(BaseModel):
+    """模板上传响应"""
+    success: bool
+    template_id: Optional[int] = None
+    focus_content: Optional[str] = None
+    error: Optional[str] = None
+
+class QuestionsGenerateRequest(BaseModel):
+    """问题生成请求"""
+    template_content: Optional[str] = None
+    template_id: Optional[int] = None
+    focus_content: Optional[str] = None
+
+class QuestionsGenerateResponse(BaseModel):
+    """问题生成响应"""
+    success: bool
+    questions: Optional[List[str]] = None
+    error: Optional[str] = None
+
+class ReportFromTemplateRequest(BaseModel):
+    """从模板生成报告请求"""
+    name: str
+    template_content: Optional[str] = None
+    template_id: Optional[int] = None
+    questions: Optional[List[str]] = None
+    datasource_id: Optional[int] = None
+
+class ReportFromChatsRequest(BaseModel):
+    """从会话生成报告请求"""
+    name: str
+    chat_record_ids: List[int]
 
 # 定义支持的分析类型
 ANALYSIS_TYPES = [
@@ -556,7 +694,7 @@ async def analyze_data(
         print(f"表名: {request.table_name}")
         print(f"分析需求: {request.requirements}")
         
-        # 处理获取数据前5条的请求
+        # 处理获取数据前5条的请求（不算会话，不创建会话记录）
         if request.query == "获取数据前5条" and request.datasource_id and request.table_name:
             try:
                 print(f"处理获取数据前5条请求: 数据源ID={request.datasource_id}, 表名={request.table_name}")
@@ -607,7 +745,7 @@ async def analyze_data(
                 execution_time = time.time() - start_time
                 print(f"获取数据前5条执行时间: {execution_time:.2f}秒")
                 
-                # 存储分析结果
+                # 存储分析结果（仅存储，不创建会话记录）
                 analysis_create = AnalysisResultCreate(
                     name=request.name or f"分析_{current_user.id}_{int(time.time())}",
                     description=request.description,
@@ -624,6 +762,8 @@ async def analyze_data(
                 analysis_result_db = AnalysisResultCRUD.create(db, analysis_create, current_user.id)
                 print(f"分析结果已存储，ID: {analysis_result_db.id}")
                 
+                # 注意：获取数据前5条不算会话，不需要创建会话记录
+                
                 return DataAnalysisResponse(
                     success=True,
                     result=result_data,
@@ -637,7 +777,7 @@ async def analyze_data(
                     error=f"获取数据前5条失败: {str(e)}"
                 )
         
-        # 处理基于字段名称生成分析建议的请求
+        # 处理基于字段名称生成分析建议的请求（不算会话，不创建会话记录）
         if request.query == "基于字段名称生成分析建议" and request.data:
             try:
                 print(f"处理基于字段名称生成分析建议的请求")
@@ -662,7 +802,7 @@ async def analyze_data(
 
 ## 任务要求
 1. 请根据字段名称和类型，生成 5-10 个具体的数据分析建议
-2. 建议应该包括字段之间的相关性分析、趋势分析、统计分析等
+2. 建议应该包括字段之间的相关性分析、趋势分析、聚类分析、分布分析、统计分析等
 3. 建议应该具体明确，适合用户直接使用
 4. 只返回建议列表，不需要其他内容
 
@@ -714,7 +854,7 @@ async def analyze_data(
                 execution_time = time.time() - start_time
                 print(f"生成分析建议执行时间: {execution_time:.2f}秒")
                 
-                # 存储分析结果
+                # 存储分析结果（仅存储，不创建会话记录）
                 analysis_create = AnalysisResultCreate(
                     name=request.name or f"分析_{current_user.id}_{int(time.time())}",
                     description=request.description,
@@ -730,6 +870,8 @@ async def analyze_data(
                 )
                 analysis_result_db = AnalysisResultCRUD.create(db, analysis_create, current_user.id)
                 print(f"分析结果已存储，ID: {analysis_result_db.id}")
+                
+                # 注意：生成分析建议不算会话，不需要创建会话记录
                 
                 return DataAnalysisResponse(
                     success=True,
@@ -838,20 +980,27 @@ async def analyze_data(
             analysis_result_db = AnalysisResultCRUD.create(db, analysis_create, current_user.id)
             print(f"分析结果已存储，ID: {analysis_result_db.id}")
             
+            # 创建会话记录（用户选择列进行分析属于会话）
+            python_code = f"使用分析工具: {request.analysis_type}, 列: {request.selected_columns}"
+            print(f"准备创建会话记录: query={request.query[:50]}, datasource_id={request.datasource_id}, result_data_length={len(result_data)}")
+            chat_id = create_analysis_chat_record(db, current_user, request, result_data, report, python_code)
+            print(f"会话记录创建完成: chat_id={chat_id}")
+            
             # 准备返回响应
             print("准备返回分析结果响应...")
             response = DataAnalysisResponse(
                 success=True,
                 result=result_data,
                 report=report,
-                analysis_id=analysis_result_db.id
+                analysis_id=analysis_result_db.id,
+                chat_id=chat_id
             )
             print("分析结果响应准备完成")
             return response
         else:
             # 尝试通过大模型识别分析意图
             print("通过大模型识别分析意图...")
-            analysis_type, selected_columns = await identify_analysis_intent(request.query, data)
+            analysis_type, selected_columns = await identify_analysis_intent(request.query, data, db, current_user, request.datasource_id)
             print(f"大模型识别结果: 分析类型={analysis_type}, 选择的列={selected_columns}")
             
             if analysis_type and selected_columns:
@@ -892,14 +1041,20 @@ async def analyze_data(
                 analysis_result_db = AnalysisResultCRUD.create(db, analysis_create, current_user.id)
                 print(f"分析结果已存储，ID: {analysis_result_db.id}")
                 
+                # 创建会话记录（大模型识别分析意图后的分析属于会话）
+                python_code = f"使用分析工具: {analysis_type}, 列: {selected_columns}"
+                print(f"准备创建会话记录: query={request.query[:50]}, datasource_id={request.datasource_id}, result_data_length={len(result_data)}")
+                chat_id = create_analysis_chat_record(db, current_user, request, result_data, report, python_code)
+                print(f"会话记录创建完成: chat_id={chat_id}")
+                
                 return DataAnalysisResponse(
                     success=True,
                     result=result_data,
                     report=report,
-                    analysis_id=analysis_result_db.id
+                    analysis_id=analysis_result_db.id,
+                    chat_id=chat_id
                 )
             else:
-                # 使用传统的代码执行方式
                 # 使用传统的代码执行方式，生成Python代码...
                 print("使用传统的代码执行方式，生成Python代码...")
                 # 将DataFrame转换为JSON字符串传递给代码生成器
@@ -946,11 +1101,15 @@ async def analyze_data(
                     analysis_result = AnalysisResultCRUD.create(db, analysis_create, current_user.id)
                     print(f"分析结果已存储，ID: {analysis_result.id}")
                     
+                    # 创建会话记录（用户输入分析需求属于会话）
+                    chat_id = create_analysis_chat_record(db, current_user, request, response.std_out, report, python_code)
+                    
                     return DataAnalysisResponse(
                         success=True,
                         result=response.std_out,
                         report=report,
-                        analysis_id=analysis_result.id
+                        analysis_id=analysis_result.id,
+                        chat_id=chat_id
                     )
                 else:
                     print(f"代码执行失败: {response.exception_msg or response.std_err}")
@@ -979,7 +1138,7 @@ async def analyze_data(
         print(f"分析过程中发生错误: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-async def identify_analysis_intent(query: str, data: pd.DataFrame) -> tuple[str, list[str]]:
+async def identify_analysis_intent(query: str, data: pd.DataFrame, db=None, current_user=None, datasource_id=None) -> tuple[str, list[str]]:
     """通过大模型识别分析意图"""
     try:
         print(f"\n=== 开始识别分析意图 ===")
@@ -992,11 +1151,39 @@ async def identify_analysis_intent(query: str, data: pd.DataFrame) -> tuple[str,
         columns = list(data.columns)
         print(f"可用列: {columns}")
         
-        # 构建提示词，优化为更清晰的function calling格式
-        prompt = f"""
-        # 角色: 数据分析意图识别专家
+        # 获取术语配置
+        terminologies = ""
+        if db and current_user and datasource_id:
+            try:
+                # 调用术语配置获取函数
+                terminologies, term_list = get_terminology_template(db, query, current_user.oid, datasource_id)
+                print(f"获取到术语配置: {term_list}")
+            except Exception as e:
+                print(f"获取术语配置失败: {str(e)}")
+                terminologies = ""
         
-        你的任务是分析用户的数据分析需求，识别出具体的分析类型和需要分析的列。
+        # 获取表结构和注释
+        table_schema = ""
+        if db and current_user and datasource_id:
+            try:
+                # 获取数据源信息
+                datasource = db.query(CoreDatasource).filter(CoreDatasource.id == datasource_id).first()
+                if datasource:
+                    # 调用get_table_schema获取表结构和注释
+                    table_schema = get_table_schema(db, current_user, datasource, query)
+                    print(f"获取到表结构: {table_schema[:100]}...")
+            except Exception as e:
+                print(f"获取表结构失败: {str(e)}")
+                table_schema = ""
+        
+        # 构建提示词，优化为更智能的分析意图识别
+        prompt = f"""
+        # 角色: 资深数据分析顾问
+        
+        你的任务是分析用户的数据分析需求，识别出最合适的分析类型和需要分析的列。
+        
+        ## 核心指令
+        你是一位资深的数据分析专家，当用户的需求不明确时，请主动思考并推荐最合适的分析方法。
         
         ## 用户需求
         {query}
@@ -1004,31 +1191,69 @@ async def identify_analysis_intent(query: str, data: pd.DataFrame) -> tuple[str,
         ## 可用列
         {', '.join(columns)}
         
-        ## 分析类型映射
-        - 描述性统计: descriptive
-        - 相关性分析: correlation
-        - 分布分析: distribution
-        - 趋势分析: trend
-        - 机器学习预测: prediction
-        - 分类分析: classification
-        - 异常检测: anomaly
-        - 时间序列分析: time_series
-        - 聚类分析: clustering
-        - 回归分析: regression
+        ## 术语配置
+        {terminologies if terminologies else "无"}
+        
+        ## 表结构和注释
+        {table_schema if table_schema else "无"}
+        
+        ## 分析类型说明
+        | 分析类型 | ID | 说明 | 所需列数 |
+        |---------|-----|------|----------|
+        | 描述性统计 | descriptive | 对数据的基本特征进行统计描述（均值、标准差、极值等） | 1+ |
+        | 相关性分析 | correlation | 分析多个变量之间的线性相关关系，生成相关性矩阵和热力图 | 2+ |
+        | 分布分析 | distribution | 分析数据的分布特征，包括分位数、直方图等 | 1+ |
+        | 趋势分析 | trend | 分析数据随时间的变化趋势 | 2+（含时间列） |
+        | 机器学习预测 | prediction | 使用机器学习模型进行预测分析 | 2+ |
+        | 分类分析 | classification | 使用分类算法进行类别预测 | 2+ |
+        | 异常检测 | anomaly | 检测数据中的异常值和离群点，生成箱线图 | 1+ |
+        | 时间序列分析 | time_series | 对时间序列数据进行深入分析 | 2+（含时间列） |
+        | 聚类分析 | clustering | 将数据自动分组，识别相似数据的群体 | 2+ |
+        | 回归分析 | regression | 建立变量之间的回归模型，分析因果关系 | 2+ |
+        
+        ## 智能分析策略
+        当用户需求不明确或没有完全匹配的分析类型时，请按照以下策略选择：
+        
+        1. **探索性分析**：如果用户只是说"分析数据"、"看看数据"等，选择 descriptive + correlation，进行多维度探索
+        2. **关联性分析**：如果用户询问"关系"、"影响"、"关联"等，选择 correlation 或 regression
+        3. **预测需求**：如果用户询问"预测"、"未来"、"趋势"等，选择 prediction 或 trend
+        4. **分组需求**：如果用户询问"分组"、"分类"、"群体"等，选择 clustering 或 classification
+        5. **异常检测**：如果用户询问"异常"、"异常值"、"离群点"等，选择 anomaly
+        6. **综合分析**：如果用户需求复杂，可以选择多个分析类型的组合
+        
+        ## 多维度分析建议
+        - 如果数据包含数值列较多，优先考虑 descriptive + correlation
+        - 如果数据包含时间列，优先考虑 trend + time_series
+        - 如果数据包含分类列，优先考虑 classification + clustering
+        - 如果数据量较大，优先考虑 anomaly 检测数据质量
         
         ## 输出格式
         请以JSON格式输出识别结果，包含以下字段：
-        - analysis_type: 识别到的分析类型
-        - columns: 需要分析的列名列表
+        - analysis_type: 识别到的分析类型（从上述分析类型ID中选择）
+        - columns: 需要分析的列名列表（从可用列中选择）
+        - reason: 选择该分析类型的理由（简要说明为什么选择这个分析类型）
         
-        注意：
-        1. 请确保识别的分析类型是上述映射中的一种
+        ## 注意事项
+        1. 请确保识别的分析类型ID正确
         2. 请确保识别的列名在可用列列表中
         3. 请根据分析类型的要求选择适当数量的列
         4. 请返回格式正确的JSON，不要包含其他无关内容
+        5. 请参考术语配置，理解用户使用的术语与列名的对应关系
+        6. 请参考表结构和注释，理解列的含义和用途
+        7. 如果用户需求不明确，选择最通用的分析类型（如 descriptive + correlation）
         
-        示例输出:
-        {{"analysis_type": "correlation", "columns": ["列1", "列2"]}}
+        ## 示例
+        示例1（明确需求）:
+        用户: "分析销售额和利润的相关性"
+        输出: {{"analysis_type": "correlation", "columns": ["销售额", "利润"], "reason": "用户明确要求分析两个变量之间的相关性"}}
+        
+        示例2（模糊需求）:
+        用户: "帮我分析一下这些数据"
+        输出: {{"analysis_type": "descriptive", "columns": ["列1", "列2", "列3"], "reason": "用户需求不明确，选择描述性统计进行数据探索"}}
+        
+        示例3（预测需求）:
+        用户: "预测下个月的销售额"
+        输出: {{"analysis_type": "prediction", "columns": ["日期", "销售额"], "reason": "用户要求预测，选择机器学习预测分析"}}
         """
         
         # 获取默认大模型配置
@@ -1054,16 +1279,21 @@ async def identify_analysis_intent(query: str, data: pd.DataFrame) -> tuple[str,
         
         # 提取JSON部分
         import re
-        json_match = re.search(r'\{[^\}]+\}', content)
+        # 使用更强大的正则表达式提取完整的JSON对象
+        json_pattern = r'\{(?:[^{}]|(?R))*\}'
+        json_match = re.search(json_pattern, content)
         if json_match:
             json_str = json_match.group(0)
             print(f"提取的JSON: {json_str}")
             intent_data = json.loads(json_str)
             analysis_type = intent_data.get('analysis_type', '')
             selected_columns = intent_data.get('columns', [])
+            reason = intent_data.get('reason', '')
             
             # 验证识别结果
             print(f"识别结果 - 分析类型: {analysis_type}, 选择的列: {selected_columns}")
+            if reason:
+                print(f"选择理由: {reason}")
             
             # 验证选择的列是否在可用列中
             valid_columns = [col for col in selected_columns if col in columns]
@@ -1084,18 +1314,60 @@ async def identify_analysis_intent(query: str, data: pd.DataFrame) -> tuple[str,
                 if analysis_type in ["descriptive", "distribution", "anomaly"]:
                     if len(selected_columns) < 1:
                         print(f"警告: {analysis_type} 分析需要至少1列")
+                        analysis_type = ""
                 elif analysis_type in ["correlation", "trend", "prediction", "classification", "time_series", "clustering", "regression"]:
                     if len(selected_columns) < 2:
                         print(f"警告: {analysis_type} 分析需要至少2列")
+                        analysis_type = ""
+            
+            # 如果验证后分析类型或列无效，使用回退策略
+            if not analysis_type or (not selected_columns or len(selected_columns) == 0):
+                print("验证失败，使用回退策略")
+                
+                # 默认选择描述性统计分析
+                analysis_type = "descriptive"
+                
+                # 选择所有数值列（排除时间列和ID列）
+                numeric_columns = []
+                for col in columns:
+                    if not any(keyword in col for keyword in ["时间", "日期", "id", "ID", "Id", "_id", "编号", "序号"]):
+                        numeric_columns.append(col)
+                
+                if not numeric_columns:
+                    numeric_columns = columns[:3]
+                
+                selected_columns = numeric_columns[:5]
+                print(f"回退策略 - 分析类型: {analysis_type}, 选择的列: {selected_columns}")
             
             print(f"验证后的识别结果 - 分析类型: {analysis_type}, 选择的列: {selected_columns}")
-            return analysis_type, selected_columns
         
-        print("无法从大模型返回结果中提取JSON")
-        return "", []
+        return analysis_type, selected_columns
+    
     except Exception as e:
         print(f"识别分析意图失败: {str(e)}")
-        return "", []
+        
+        # 添加回退策略：如果大模型识别失败，自动选择描述性统计分析和所有数值列
+        print("使用回退策略")
+        
+        # 默认选择描述性统计分析
+        analysis_type = "descriptive"
+        
+        # 选择所有数值列（排除时间列和ID列）
+        numeric_columns = []
+        for col in columns:
+            # 简单判断：如果列名不包含"时间"、"日期"等关键字，且不是明显的ID列，则认为是数值列
+            if not any(keyword in col for keyword in ["时间", "日期", "id", "ID", "Id", "_id", "编号", "序号"]):
+                numeric_columns.append(col)
+        
+        # 如果没有找到数值列，选择前3列
+        if not numeric_columns:
+            numeric_columns = columns[:3]
+        
+        # 最多选择5列进行分析
+        selected_columns = numeric_columns[:5]
+        print(f"回退策略 - 分析类型: {analysis_type}, 选择的列: {selected_columns}")
+        
+        return analysis_type, selected_columns
 
 
 async def fetch_data_from_datasource(datasource_id: int, table_name: str, db) -> pd.DataFrame:
@@ -1367,6 +1639,324 @@ async def delete_report(
     ReportCRUD.delete(db, report_id)
     return {"message": "报告删除成功"}
 
+# 报告生成相关API
+@router.post("/upload-template", response_model=TemplateUploadResponse)
+async def upload_template(
+    file: UploadFile = File(...),
+    db=Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """上传报告模板并解析【重点关注】内容"""
+    try:
+        # 读取文件内容
+        content = await file.read()
+        content_str = content.decode('utf-8')
+        
+        # 解析【重点关注】内容
+        focus_content = extract_focus_content(content_str)
+        
+        # 保存模板
+        template_create = ReportTemplateCreate(
+            name=file.filename or "未命名模板",
+            description="上传的报告模板",
+            content=content_str,
+            is_default=False
+        )
+        template = ReportTemplateCRUD.create(db, template_create, current_user.id)
+        
+        return TemplateUploadResponse(
+            success=True,
+            template_id=template.id,
+            focus_content=focus_content
+        )
+    except Exception as e:
+        return TemplateUploadResponse(
+            success=False,
+            error=str(e)
+        )
+
+def extract_focus_content(content: str) -> str:
+    """提取模板中的【重点关注】内容"""
+    import re
+    # 匹配【重点关注】和下一个【】之间的内容
+    pattern = r'【重点关注】(.*?)(?=【|$)'
+    match = re.search(pattern, content, re.DOTALL)
+    if match:
+        return match.group(1).strip()
+    return ""
+
+@router.post("/generate-questions", response_model=QuestionsGenerateResponse)
+async def generate_questions(
+    request: QuestionsGenerateRequest,
+    db=Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """根据模板内容生成问题列表"""
+    try:
+        # 获取模板内容
+        content = request.template_content
+        if request.template_id:
+            template = ReportTemplateCRUD.get(db, request.template_id)
+            if template:
+                content = template.content
+        
+        # 获取重点关注内容
+        focus_content = request.focus_content
+        if not focus_content and content:
+            focus_content = extract_focus_content(content)
+        
+        if not focus_content:
+            return QuestionsGenerateResponse(
+                success=False,
+                error="未找到【重点关注】内容"
+            )
+        
+        # 调用大模型生成问题列表
+        config = await get_default_config()
+        llm = LLMFactory.create_llm(config)
+        
+        prompt = f"""
+# ROLE: 问题生成专家
+
+你是一位专业的数据分析问题生成专家。请根据以下【重点关注】内容，生成一系列相关的数据分析问题。
+
+## 重点关注内容
+{focus_content}
+
+## 任务要求
+1. 根据【重点关注】内容，生成5-10个具体的数据分析问题
+2. 问题应该覆盖重点关注内容的各个方面
+3. 问题应该适合使用智能问数或数据分析工具来回答
+4. 问题应该简洁明了
+
+## 输出格式
+请以JSON数组格式输出问题列表，例如：
+["问题1", "问题2", "问题3"]
+"""
+        
+        if hasattr(llm, 'generate'):
+            result = llm.llm.invoke(prompt)
+        else:
+            result = llm.llm.invoke(prompt)
+        
+        if hasattr(result, 'content'):
+            content = result.content
+        elif isinstance(result, str):
+            content = result
+        else:
+            content = str(result)
+        
+        # 提取JSON数组
+        import re
+        json_match = re.search(r'\[.*\]', content, re.DOTALL)
+        if json_match:
+            questions = json.loads(json_match.group(0))
+        else:
+            # 如果没有找到JSON，使用默认问题
+            questions = [
+                "分析重点关注内容中的主要数据指标",
+                "分析重点关注内容中的趋势变化",
+                "分析重点关注内容中的异常情况",
+                "分析重点关注内容中的相关性",
+                "总结重点关注内容的关键发现"
+            ]
+        
+        return QuestionsGenerateResponse(
+            success=True,
+            questions=questions
+        )
+    except Exception as e:
+        return QuestionsGenerateResponse(
+            success=False,
+            error=str(e)
+        )
+
+@router.post("/generate-report-from-template", response_model=ReportResponse)
+async def generate_report_from_template(
+    request: ReportFromTemplateRequest,
+    db=Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """从模板生成报告"""
+    try:
+        # 获取问题列表
+        questions = request.questions
+        if not questions:
+            # 如果没有提供问题，先生成问题
+            q_request = QuestionsGenerateRequest(
+                template_content=request.template_content,
+                template_id=request.template_id
+            )
+            q_response = await generate_questions(q_request, db, current_user)
+            questions = q_response.questions or []
+        
+        if not questions:
+            raise HTTPException(status_code=400, detail="无法生成问题列表")
+        
+        # 执行问题并收集结果
+        results = []
+        for idx, question in enumerate(questions):
+            print(f"执行问题 {idx+1}/{len(questions)}: {question}")
+            
+            # 调用智能问数API执行问题
+            # 这里需要根据实际情况调用相应的工具
+            try:
+                # 模拟执行结果
+                result = {
+                    "question": question,
+                    "answer": f"针对问题 '{question}' 的分析结果",
+                    "data": {}
+                }
+                results.append(result)
+            except Exception as e:
+                results.append({
+                    "question": question,
+                    "answer": f"执行失败: {str(e)}",
+                    "data": {}
+                })
+        
+        # 生成综合报告
+        report_content = await synthesize_report(request.name, questions, results)
+        
+        # 保存报告
+        report_create = ReportCreate(
+            name=request.name,
+            description=f"基于模板生成的报告，包含{len(questions)}个问题",
+            report_content=report_content
+        )
+        report = ReportCRUD.create(db, report_create, current_user.id)
+        
+        return ReportResponse.from_orm(report)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/generate-report-from-chats", response_model=ReportResponse)
+async def generate_report_from_chats(
+    request: ReportFromChatsRequest,
+    db=Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """从历史会话生成报告"""
+    try:
+        from apps.chat.curd.chat import get_chat_with_records
+        
+        # 获取选中的会话记录
+        chat_records = []
+        for record_id in request.chat_record_ids:
+            # 查询会话记录
+            record = db.query(ChatRecord).filter(ChatRecord.id == record_id).first()
+            if record and record.create_by == current_user.id:
+                chat_records.append(record)
+        
+        if not chat_records:
+            raise HTTPException(status_code=400, detail="未找到有效的会话记录")
+        
+        # 提取问题和答案
+        questions = []
+        results = []
+        for record in chat_records:
+            question = record.question
+            answer = ""
+            
+            # 从不同字段获取答案
+            if record.data:
+                try:
+                    data = json.loads(record.data) if isinstance(record.data, str) else record.data
+                    if data:
+                        answer = str(data)
+                except:
+                    answer = str(record.data)
+            elif record.sql_answer:
+                answer = record.sql_answer
+            elif record.chart_answer:
+                answer = record.chart_answer
+            elif record.analysis:
+                answer = record.analysis
+            
+            questions.append(question)
+            results.append({
+                "question": question,
+                "answer": answer,
+                "data": {}
+            })
+        
+        # 生成综合报告
+        report_content = await synthesize_report(request.name, questions, results)
+        
+        # 保存报告
+        report_create = ReportCreate(
+            name=request.name,
+            description=f"基于{len(chat_records)}个会话生成的综合报告",
+            report_content=report_content,
+            chat_record_ids=request.chat_record_ids
+        )
+        report = ReportCRUD.create(db, report_create, current_user.id)
+        
+        return ReportResponse.from_orm(report)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def synthesize_report(title: str, questions: list, results: list) -> str:
+    """综合问题和结果生成报告"""
+    try:
+        config = await get_default_config()
+        llm = LLMFactory.create_llm(config)
+        
+        # 构建问题和结果的字符串
+        qr_str = ""
+        for i, (q, r) in enumerate(zip(questions, results), 1):
+            qr_str += f"## 问题{i}: {q}\n\n"
+            qr_str += f"### 分析结果\n{r['answer']}\n\n"
+        
+        prompt = f"""
+# ROLE: 数据分析报告撰写专家
+
+请根据以下问题和分析结果，撰写一份专业的数据分析报告。
+
+## 报告标题
+{title}
+
+## 问题与分析结果
+{qr_str}
+
+## 报告要求
+1. 报告应该结构清晰，包含摘要、详细分析、结论和建议
+2. 对每个问题的分析结果进行综合推理
+3. 识别数据中的趋势、模式和异常
+4. 提供有价值的洞察和建议
+5. 使用markdown格式输出
+6. 语言专业但易于理解
+
+## 输出格式
+只输出报告内容，不要包含其他无关内容。
+"""
+        
+        if hasattr(llm, 'generate'):
+            result = llm.llm.invoke(prompt)
+        else:
+            result = llm.llm.invoke(prompt)
+        
+        if hasattr(result, 'content'):
+            report_content = result.content
+        elif isinstance(result, str):
+            report_content = result
+        else:
+            report_content = str(result)
+        
+        return report_content
+    except Exception as e:
+        # 生成默认报告
+        report = f"# {title}\n\n"
+        report += "## 摘要\n\n"
+        report += f"本报告基于{len(questions)}个问题的分析结果生成。\n\n"
+        report += "## 详细分析\n\n"
+        for i, (q, r) in enumerate(zip(questions, results), 1):
+            report += f"### {i}. {q}\n\n"
+            report += f"{r['answer']}\n\n"
+        report += "## 结论\n\n"
+        report += "分析完成，请查看上述详细分析结果。\n"
+        return report
+
 async def generate_analysis_code(query: str, data: str) -> str:
     """生成分析代码"""
     try:
@@ -1450,37 +2040,51 @@ async def generate_report(user_query: str, analysis_result: str) -> str:
         
         # 构建提示词
         prompt = f"""
-# ROLE: 数据分析报告撰写专家
+# ROLE: 资深数据分析顾问
 
-你是一位专业的数据分析报告撰写专家，擅长将复杂的数据分析结果转化为清晰、准确、易懂的自然语言总结。
-
-你的任务是根据用户的原始查询需求和Python脚本的分析输出结果，生成一段结构清晰、语言简洁、内容准确的总结性描述。
+你是一位资深的数据分析顾问，擅长将复杂的数据分析结果转化为有价值的业务洞察和建议。
 
 ---
 
 ### 输入信息
 
-【用户原始查询】
+**用户原始查询**
 {user_query}
 
-【Python分析结果】
+**分析结果详情**
 {simplified_result}
 
 ---
 
 ### 输出要求
 
-1. 只输出自然语言总结，不要包含任何代码、JSON、Markdown或其他格式。
-2. 总结内容应直接回应用户的查询需求，突出关键结论。
-3. 如果分析结果为空或出错，请明确指出（如"未找到相关数据"或"分析过程中出现错误"）。
-4. 语言要简洁明了，避免使用技术术语，除非用户查询中明确涉及。
-5. 不要添加任何解释性内容或额外建议，只做结果归纳。
-6. 不要猜测或虚构内容，严格基于Python输出结果进行总结。
+1. **结构清晰**：报告应包含以下几个部分，每部分用简洁的小标题：
+   - 分析概述：简要说明本次分析的目的和方法（一句话即可）
+   - 关键发现：列出最重要的2-3个发现，包含具体数值和数据特征
+   - 业务建议：基于分析结果给出1-2条具体可操作的建议
+   - 注意事项：指出分析的局限性或需要关注的问题
+
+2. **内容详实**：
+   - 如果是聚类分析，请分析每个簇的特征，说明各类别之间的差异和业务含义
+   - 如果是相关性分析，请解释相关关系的强度（高/中/低）和业务意义
+   - 如果是异常检测，请说明异常值的影响和处理建议，给出异常比例
+   - 如果是预测分析，请解释预测结果的可靠性和应用场景
+
+3. **语言要求**：
+   - 使用专业但易懂的语言，避免过于技术化的术语
+   - 提供具体的数值和对比，增强说服力
+   - 给出可操作的建议，而不仅仅是描述事实
+
+4. **格式要求**：
+   - 标题格式：**分析概述**、**关键发现**、**业务建议**、**注意事项**（用中文顿号分隔）
+   - 不要使用大号标题（不要用#或##）
+   - 内容详实但精炼，总字数控制在400-500字
+   - 严格基于提供的分析结果，不要虚构内容
 
 ---
 
-请生成符合要求的总结内容：
-""".format(user_query=user_query, simplified_result=simplified_result)
+请生成一份专业、有价值的数据分析报告：
+"""
         
         # 获取默认大模型配置
         config = await get_default_config()
@@ -1653,14 +2257,28 @@ def simplify_analysis_result(analysis_result: str) -> str:
                     if 'unique' in column_stats:
                         simplified.append(f"  唯一值: {column_stats['unique']}")
         
-        # 添加相关性分析信息
+        # 添加相关性分析信息 - 改进版，显示具体的相关性数值
         if 'correlation_matrix' in result:
             simplified.append("\n相关性矩阵:")
             corr_matrix = result['correlation_matrix']
             columns = list(corr_matrix.keys())
             if columns:
                 simplified.append(f"  分析列: {', '.join(columns)}")
-                simplified.append("  相关性分析已完成")
+                # 显示每对列的相关性
+                for i, col1 in enumerate(columns):
+                    for col2 in columns[i+1:]:  # 避免重复显示
+                        try:
+                            # 不同的字典结构可能会有不同的获取方式
+                            if isinstance(corr_matrix, dict) and col1 in corr_matrix and isinstance(corr_matrix[col1], dict):
+                                if col2 in corr_matrix[col1]:
+                                    corr_value = corr_matrix[col1][col2]
+                                    if not pd.isna(corr_value):
+                                        strength = "强正相关" if corr_value > 0.7 else ("中等正相关" if corr_value > 0.3 else ("弱正相关" if corr_value > 0 else "无相关"))
+                                        if corr_value < 0:
+                                            strength = "强负相关" if corr_value < -0.7 else ("中等负相关" if corr_value < -0.3 else "弱负相关")
+                                        simplified.append(f"  {col1} 与 {col2}: {corr_value:.3f} ({strength})")
+                        except Exception as e:
+                            continue  # 跳过有问题的相关性计算
         
         # 添加分布分析信息
         if 'distributions' in result:
@@ -1672,10 +2290,118 @@ def simplify_analysis_result(analysis_result: str) -> str:
                     for quantile, value in dist['quantiles'].items():
                         simplified.append(f"    {quantile}: {value:.2f}")
         
+        # 添加聚类分析信息
+        if 'clusters' in result:
+            clusters = result['clusters']
+            simplified.append(f"\n聚类分析结果:")
+            if 'model' in clusters:
+                simplified.append(f"  模型: {clusters['model']}")
+            if 'n_clusters' in clusters:
+                simplified.append(f"  聚类数量: {clusters['n_clusters']}")
+            if 'cluster_columns' in clusters:
+                simplified.append(f"  聚类列: {', '.join(clusters['cluster_columns'])}")
+            if 'cluster_counts' in clusters:
+                simplified.append(f"  各类簇样本数:")
+                for cluster_id, count in clusters['cluster_counts'].items():
+                    simplified.append(f"    簇{cluster_id}: {count}个样本")
+            if 'cluster_centers' in clusters:
+                simplified.append(f"  聚类中心:")
+                centers = clusters['cluster_centers']
+                if isinstance(centers, dict):
+                    for cluster_id, center in centers.items():
+                        simplified.append(f"    簇{cluster_id}中心:")
+                        for col, val in center.items():
+                            simplified.append(f"      {col}: {val:.2f}")
+        
+        # 添加异常检测分析信息
+        if 'anomalies' in result:
+            anomalies = result['anomalies']
+            simplified.append(f"\n异常检测结果:")
+            for column, anomaly in anomalies.items():
+                simplified.append(f"\n  {column}:")
+                if 'lower_bound' in anomaly:
+                    simplified.append(f"    下限值: {anomaly['lower_bound']:.2f}")
+                if 'upper_bound' in anomaly:
+                    simplified.append(f"    上限值: {anomaly['upper_bound']:.2f}")
+                if 'outlier_count' in anomaly:
+                    simplified.append(f"    异常值数量: {anomaly['outlier_count']}")
+        
+        # 添加预测分析信息
+        if 'predictions' in result:
+            predictions = result['predictions']
+            simplified.append(f"\n预测分析结果:")
+            if 'model' in predictions:
+                simplified.append(f"  模型: {predictions['model']}")
+            if 'target_column' in predictions:
+                simplified.append(f"  目标列: {predictions['target_column']}")
+            if 'mse' in predictions:
+                simplified.append(f"  均方误差: {predictions['mse']:.4f}")
+            if 'r2' in predictions:
+                simplified.append(f"  R²分数: {predictions['r2']:.4f}")
+        
+        # 添加回归分析信息
+        if 'regression' in result:
+            regression = result['regression']
+            simplified.append(f"\n回归分析结果:")
+            if 'model' in regression:
+                simplified.append(f"  模型: {regression['model']}")
+            if 'target_column' in regression:
+                simplified.append(f"  目标列: {regression['target_column']}")
+            if 'mse' in regression:
+                simplified.append(f"  均方误差: {regression['mse']:.4f}")
+            if 'r2' in regression:
+                simplified.append(f"  R²分数: {regression['r2']:.4f}")
+        
+        # 添加时间序列分析信息
+        if 'time_series' in result:
+            time_series = result['time_series']
+            simplified.append(f"\n时间序列分析结果:")
+            for column, ts_data in time_series.items():
+                simplified.append(f"\n  {column}:")
+                if 'mean' in ts_data:
+                    simplified.append(f"    均值: {ts_data['mean']:.2f}")
+                if 'std' in ts_data:
+                    simplified.append(f"    标准差: {ts_data['std']:.2f}")
+        
+        # 添加趋势分析信息
+        if 'trends' in result:
+            trends = result['trends']
+            simplified.append(f"\n趋势分析结果:")
+            for column, trend_data in trends.items():
+                simplified.append(f"\n  {column}:")
+                if isinstance(trend_data, dict):
+                    if 'trend' in trend_data:
+                        simplified.append(f"    趋势方向: {'上升' if trend_data['trend'] > 0 else '下降'}")
+                    if 'slope' in trend_data:
+                        simplified.append(f"    趋势斜率: {trend_data['slope']:.4f}")
+        
+        # 添加分类分析信息
+        if 'classification' in result:
+            classification = result['classification']
+            simplified.append(f"\n分类分析结果:")
+            if 'model' in classification:
+                simplified.append(f"  模型: {classification['model']}")
+            if 'accuracy' in classification:
+                simplified.append(f"  准确率: {classification['accuracy']:.4f}")
+            if 'precision' in classification:
+                simplified.append(f"  精确率: {classification['precision']:.4f}")
+            if 'recall' in classification:
+                simplified.append(f"  召回率: {classification['recall']:.4f}")
+            if 'f1_score' in classification:
+                simplified.append(f"  F1分数: {classification['f1_score']:.4f}")
+        
+        # 如果上述都没有找到，检查是否有原始数据直接返回
+        if not simplified and analysis_result and len(analysis_result.strip()) > 0:
+            return f"分析结果数据:\n{analysis_result[:1000]}"
+        
         return '\n'.join(simplified) if simplified else '未找到分析结果'
     except Exception as e:
-        # 如果解析失败，返回原始结果的前500个字符
-        return analysis_result[:500] + ('...' if len(analysis_result) > 500 else '')
+        # 如果解析失败，直接返回原始结果
+        try:
+            return f"分析结果数据:\n{analysis_result[:1500]}"
+        except:
+            return '分析结果数据存在'
+
 
 import time
 import pandas as pd

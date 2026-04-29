@@ -4,6 +4,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, Text, BigInteger, DateTime, Identity, Boolean, ARRAY, String
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlmodel import SQLModel, Field
 
 
@@ -33,7 +34,7 @@ class AnalysisResult(SQLModel, table=True):
     error_message: str = Field(sa_column=Column(Text, nullable=True))
     
     # 分析结果
-    result_data: str = Field(sa_column=Column(Text, nullable=True))  # 分析结果数据（JSON 字符串）
+    result_data: str = Field(sa_column=Column(LONGTEXT, nullable=True))  # 分析结果数据（JSON 字符串，包含图表等）
     result_summary: str = Field(sa_column=Column(Text, nullable=True))  # 分析结果摘要
     
     # 报告相关

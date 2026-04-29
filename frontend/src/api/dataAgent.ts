@@ -334,5 +334,41 @@ export const dataAgentApi = {
   getTables: (datasourceId: number) => {
     return request.post<TableResponse[]>(`/datasource/tableList/${datasourceId}`);
   },
+
+  /**
+   * 根据模板内容生成问题列表
+   * @param params 问题生成请求参数
+   * @returns 问题生成响应
+   */
+  generateQuestions: (params: { template_content?: string; template_id?: number; focus_content?: string }) => {
+    return request.post<{ success: boolean; questions?: string[]; error?: string }>(
+      '/data-agent/generate-questions',
+      params
+    );
+  },
+
+  /**
+   * 从模板生成报告
+   * @param params 报告生成请求参数
+   * @returns 报告详情
+   */
+  generateReportFromTemplate: (params: {
+    name: string;
+    template_content?: string;
+    template_id?: number;
+    questions?: string[];
+    datasource_id?: number;
+  }) => {
+    return request.post<ReportResponse>('/data-agent/generate-report-from-template', params);
+  },
+
+  /**
+   * 从会话生成报告
+   * @param params 报告生成请求参数
+   * @returns 报告详情
+   */
+  generateReportFromChats: (params: { name: string; chat_record_ids: number[] }) => {
+    return request.post<ReportResponse>('/data-agent/generate-report-from-chats', params);
+  },
 };
 

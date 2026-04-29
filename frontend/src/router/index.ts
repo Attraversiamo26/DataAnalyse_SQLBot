@@ -12,6 +12,7 @@ import Model from '@/views/system/model/Model.vue'
 import DataAgentView from '@/views/data-agent/index.vue'
 import AnalysisView from '@/views/analysis/index.vue'
 import ReportView from '@/views/report/index.vue'
+import HomePage from '@/views/HomePage.vue'
 // import ToolDispatcher from '@/views/tool-dispatcher/index.vue'
 // import Embedded from '@/views/system/embedded/index.vue'
 // import SetAssistant from '@/views/system/embedded/iframe.vue'
@@ -50,21 +51,27 @@ export const routes = [
   {
     path: '/',
     name: 'home',
-    redirect: '/tools/tool-select',
+    component: ToolDispatchLayout,
+    redirect: '/home',
+    children: [
+      {
+        path: 'home',
+        name: 'home-page',
+        component: HomePage,
+        meta: { title: '智能数据分析助手', iconActive: 'chat', iconDeActive: 'noChat' },
+      },
+    ],
   },
   {
     path: '/chat',
-    component: LayoutDsl,
-    redirect: '/chat/index',
+    component: ToolDispatchLayout,
+    redirect: '/chat/history',
     children: [
       {
-        path: 'index',
-        name: 'chat',
-        component: chat,
-        props: (route: any) => {
-          return { startChatDsId: route.query.start_chat }
-        },
-        meta: { title: t('menu.Data Q&A'), iconActive: 'chat', iconDeActive: 'noChat' },
+        path: 'history',
+        name: 'chat-history',
+        component: () => import('@/views/chat/history/Index.vue'),
+        meta: { title: '会话管理', iconActive: 'chat', iconDeActive: 'noChat' },
       },
     ],
   },
@@ -83,19 +90,32 @@ export const routes = [
         path: 'chat',
         name: 'tools-chat',
         component: chat,
+        props: (route: any) => {
+          return { 
+            startChatDsId: route.query.start_chat,
+            chat_id: route.query.chat_id,
+            record_id: route.query.record_id
+          }
+        },
         meta: { title: '智能问数', iconActive: 'chat', iconDeActive: 'noChat' },
       },
       {
         path: 'analysis',
         name: 'tools-analysis',
         component: AnalysisView,
-        meta: { title: '数据分析', iconActive: 'embedded', iconDeActive: 'noEmbedded' },
+        props: (route: any) => {
+          return { 
+            chat_id: route.query.chat_id,
+            record_id: route.query.record_id
+          }
+        },
+        meta: { title: '数据分析', iconActive: 'analysis', iconDeActive: 'noAnalysis' },
       },
       {
         path: 'report',
         name: 'tools-report',
         component: ReportView,
-        meta: { title: '报告查看', iconActive: 'chart', iconDeActive: 'noChart' },
+        meta: { title: '报告生成', iconActive: 'chart', iconDeActive: 'noChart' },
       },
       {
         path: 'data-agent',

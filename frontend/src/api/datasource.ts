@@ -32,5 +32,6 @@ export const datasourceApi = {
       responseType: 'blob',
       requestOptions: { customError: true },
     }),
-  batchUpdateFieldComments: (data: any) => request.post('/datasource/batchUpdateFieldComments', data),
+  batchUpdateFieldComments: (data: any) =>
+    request.post('/datasource/batchUpdateFieldComments', data),
 }

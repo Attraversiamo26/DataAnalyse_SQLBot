@@ -1,11 +1,11 @@
 <script setup lang="ts">
-// 报告查看工具组件
+// 报告生成工具组件
 </script>
 
 <template>
   <div class="report-tool">
     <div class="report-container">
-      <h3>报告查看</h3>
+      <h3>报告生成</h3>
       <p>这里将展示生成的分析报告</p>
       <!-- 后续可以添加报告列表和查看功能 -->
     </div>

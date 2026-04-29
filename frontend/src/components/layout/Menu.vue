@@ -48,7 +48,6 @@ const routerList = computed(() => {
     return (
       !route.path.includes('embeddedPage') &&
       !route.path.includes('assistant') &&
-      !route.path.includes('embeddedPage') &&
       !route.path.includes('canvas') &&
       !route.path.includes('member') &&
       !route.path.includes('professional') &&
@@ -63,9 +62,16 @@ const routerList = computed(() => {
       route.path !== '/admin-login' &&
       route.path !== '/chatPreview' &&
       !route.path.includes('/system') &&
+      !route.path.includes('/dsTable') &&
+      !route.path.includes('/set') &&
+      !route.path.includes('/dashboard') &&
+      !route.path.includes('/chat') &&
+      route.path !== '/' &&
+      route.path !== '/home' &&
       ((route.path.includes('set') && userStore.isSpaceAdmin) || !route.redirect) &&
       route.path !== '/:pathMatch(.*)*' &&
-      !route.path.includes('dsTable')
+      route.path.length > 1 &&
+      !route.path.startsWith('/tools')
     )
   })
 

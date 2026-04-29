@@ -14,6 +14,11 @@ const activeMenu = computed(() => route.path)
 // 工具菜单列表
 const toolMenuList = computed(() => [
   {
+    path: '/home',
+    name: 'home-assistant',
+    meta: { title: '智能助手', iconActive: 'icon_ai', iconDeActive: 'noIcon_ai' },
+  },
+  {
     path: '/tools/tool-select',
     name: 'tool-select',
     meta: { title: '工具选择', iconActive: 'set', iconDeActive: 'noSet' },
@@ -31,7 +36,7 @@ const toolMenuList = computed(() => [
       {
         path: '/tools/report',
         name: 'report',
-        meta: { title: '报告查看', iconActive: 'dashboard', iconDeActive: 'noDashboard' },
+        meta: { title: '报告生成', iconActive: 'dashboard', iconDeActive: 'noDashboard' },
       },
     ],
   },
@@ -39,6 +44,11 @@ const toolMenuList = computed(() => [
     path: '/tools/datasource',
     name: 'datasource',
     meta: { title: '数据源管理', iconActive: 'ds', iconDeActive: 'noDs' },
+  },
+  {
+    path: '/chat/history',
+    name: 'chat-history',
+    meta: { title: '会话管理', iconActive: 'chat', iconDeActive: 'noChat' },
   },
   {
     path: '/tools/terminology',
@@ -146,6 +156,13 @@ const toolMenuList = computed(() => [
       color: #006633 !important;
       font-weight: 700 !important;
     }
+  }
+  
+  /* 智能助手菜单项样式 */
+  .ed-menu-item:nth-child(1) {
+    font-size: 16px !important;
+    font-weight: 700 !important;
+    justify-content: center !important;
   }
 
   /* 子菜单项样式 */

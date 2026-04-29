@@ -35,29 +35,25 @@
         </div>
         <div v-else>
           <div style="display: flex; justify-content: space-between; align-items: center">
-              <div style="display: flex; justify-content: start; align-items: center">
-                <span>{{ currentTable.table_name }}</span>
-                <el-divider direction="vertical" />
-                <span>{{ t('ds.comment') }}:</span>
-                <span>{{ currentTable.custom_comment }}</span>
-                <el-button
-                  style="margin-left: 10px"
-                  text
-                  class="action-btn"
-                  :icon="IconOpeEdit"
-                  @click="editTable"
-                />
-              </div>
-              <div>
-                <el-button
-                  type="primary"
-                  size="small"
-                  @click="openBatchPasteDialog"
-                >
-                  {{ t('ds.batch_paste_comment') }}
-                </el-button>
-              </div>
+            <div style="display: flex; justify-content: start; align-items: center">
+              <span>{{ currentTable.table_name }}</span>
+              <el-divider direction="vertical" />
+              <span>{{ t('ds.comment') }}:</span>
+              <span>{{ currentTable.custom_comment }}</span>
+              <el-button
+                style="margin-left: 10px"
+                text
+                class="action-btn"
+                :icon="IconOpeEdit"
+                @click="editTable"
+              />
             </div>
+            <div>
+              <el-button type="primary" size="small" @click="openBatchPasteDialog">
+                {{ t('ds.batch_paste_comment') }}
+              </el-button>
+            </div>
+          </div>
           <el-tabs v-model="activeName" class="demo-tabs" @tab-click="handleClick">
             <el-tab-pane :label="t('ds.table_schema')" name="schema">
               <el-table :data="fieldList" style="width: 100%">
@@ -146,7 +142,13 @@
       :close-on-click-modal="false"
     >
       <div>{{ t('ds.batch_paste_comment_tip') }}</div>
-      <el-input v-model="batchPasteContent" clearable :rows="10" type="textarea" placeholder="{{ t('ds.batch_paste_comment_placeholder') }}" />
+      <el-input
+        v-model="batchPasteContent"
+        clearable
+        :rows="10"
+        type="textarea"
+        placeholder="{{ t('ds.batch_paste_comment_placeholder') }}"
+      />
       <div style="display: flex; justify-content: flex-end; margin-top: 20px">
         <el-button secondary @click="closeBatchPasteDialog">{{ t('common.cancel') }}</el-button>
         <el-button type="primary" @click="saveBatchPaste">{{ t('common.confirm') }}</el-button>
@@ -169,10 +171,10 @@ import { ElMessage } from 'element-plus'
 
 const props = defineProps({
   dsId: { type: [Number], required: true },
-  dsName: { 
-    type: [String], 
+  dsName: {
+    type: [String],
     required: true,
-    default: ''
+    default: '',
   },
 })
 
@@ -282,35 +284,38 @@ const saveBatchPaste = () => {
   // 解析粘贴的内容
   const lines = batchPasteContent.value.trim().split('\n')
   const fieldComments: any = {}
-  
-  lines.forEach(line => {
+
+  lines.forEach((line) => {
     const match = line.match(/^(.*?):\s*(.*)$/)
     if (match) {
       const [, comment, fieldName] = match
       fieldComments[fieldName.trim()] = comment.trim()
     }
   })
-  
+
   // 调用 API 批量更新字段注释
-  datasourceApi.batchUpdateFieldComments({
-    table_id: currentTable.value.id,
-    field_comments: fieldComments
-  }).then((res: any) => {
-    closeBatchPasteDialog()
-    ElMessage({
-      message: t('ds.batch_update_success', { count: res.updated_count }),
-      type: 'success',
-      showClose: true,
+  datasourceApi
+    .batchUpdateFieldComments({
+      table_id: currentTable.value.id,
+      field_comments: fieldComments,
     })
-    // 刷新字段列表
-    clickTable(currentTable.value)
-  }).catch(() => {
-    ElMessage({
-      message: t('ds.batch_update_failed'),
-      type: 'error',
-      showClose: true,
+    .then((res: any) => {
+      closeBatchPasteDialog()
+      ElMessage({
+        message: t('ds.batch_update_success', { count: res.updated_count }),
+        type: 'success',
+        showClose: true,
+      })
+      // 刷新字段列表
+      clickTable(currentTable.value)
     })
-  })
+    .catch(() => {
+      ElMessage({
+        message: t('ds.batch_update_failed'),
+        type: 'error',
+        showClose: true,
+      })
+    })
 }
 
 const clickTable = (table: any) => {

@@ -999,6 +999,7 @@ class LLMService:
         try:
             data_result = data_obj.get('data')
             limit = 1000
+            max_data_size = 10485760  # 10MB 限制
             if data_result:
                 data_result = prepare_for_orjson(data_result)
                 if data_result and len(data_result) > limit and self.enable_sql_row_limit:
@@ -1007,8 +1008,30 @@ class LLMService:
                 else:
                     data_obj['data'] = data_result
                 data_obj['datasource'] = self.ds.id
+            
+            # 序列化数据并检查大小
+            serialized_data = orjson.dumps(data_obj).decode()
+            if len(serialized_data) > max_data_size:
+                # 如果数据过大，进一步限制行数
+                if data_result:
+                    # 逐步减少行数，直到数据大小符合要求
+                    reduced_limit = limit // 2
+                    while reduced_limit > 0:
+                        data_obj['data'] = data_result[:reduced_limit]
+                        data_obj['limit'] = reduced_limit
+                        serialized_data = orjson.dumps(data_obj).decode()
+                        if len(serialized_data) <= max_data_size:
+                            break
+                        reduced_limit = reduced_limit // 2
+                    # 如果即使减少到0行仍然过大，只保存字段信息
+                    if len(serialized_data) > max_data_size:
+                        data_obj['data'] = []
+                        data_obj['limit'] = 0
+                        data_obj['truncated'] = True
+                        serialized_data = orjson.dumps(data_obj).decode()
+            
             return save_sql_exec_data(session=session, record_id=self.record.id,
-                                      data=orjson.dumps(data_obj).decode())
+                                      data=serialized_data)
         except Exception as e:
             raise e
 

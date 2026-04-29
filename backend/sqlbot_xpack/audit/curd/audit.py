@@ -5,7 +5,8 @@ def build_resource_union_query():
     """Mock resource union query that doesn't require DsPermission or DsRules"""
     
     # Create a simple dummy query that doesn't depend on DsRules or DsPermission
-    from sqlalchemy.sql import select, func, String, literal_column
+    from sqlalchemy import String
+    from sqlalchemy.sql import select, func, literal_column
     
     # Use a simple select from dual or just a literal for compatibility
     # We'll return a simple select that will work with any table

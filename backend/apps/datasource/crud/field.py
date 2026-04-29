@@ -36,11 +36,19 @@ def batch_update_field_comments(session: SessionDep, table_id: int, field_commen
     """
     updated_count = 0
     for field_name, custom_comment in field_comments.items():
-        # 查找匹配的字段
+        # 查找匹配的字段（先尝试精确匹配，再尝试大小写不敏感匹配）
         field = session.query(CoreField).filter(
             CoreField.table_id == table_id,
             CoreField.field_name == field_name
         ).first()
+        
+        # 如果精确匹配没有找到，尝试大小写不敏感匹配
+        if not field:
+            field = session.query(CoreField).filter(
+                CoreField.table_id == table_id,
+                CoreField.field_name.ilike(field_name)
+            ).first()
+        
         if field:
             field.custom_comment = custom_comment
             session.add(field)

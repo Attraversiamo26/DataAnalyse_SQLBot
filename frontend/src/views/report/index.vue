@@ -3,91 +3,135 @@
     <el-card class="report-card">
       <template #header>
         <div class="card-header">
-          <span>报告查看</span>
+          <span>报告生成</span>
+          <el-tabs v-model="activeTab" class="report-tabs">
+            <el-tab-pane label="模板生成" name="template">
+            </el-tab-pane>
+            <el-tab-pane label="会话汇总" name="chat">
+            </el-tab-pane>
+          </el-tabs>
         </div>
       </template>
       
-      <!-- 报告模板管理 -->
-      <el-divider content-position="left">报告模板管理</el-divider>
-      <div class="template-section">
-        <el-button type="primary" @click="uploadTemplate">上传模板</el-button>
-        <el-table :data="reportTemplates" style="width: 100%; margin-top: 20px">
-          <el-table-column prop="name" label="模板名称" width="200" />
-          <el-table-column prop="description" label="描述" width="300" />
-          <el-table-column prop="create_time" label="创建时间" width="180" />
-          <el-table-column prop="is_default" label="是否默认" width="100">
-            <template #default="scope">
-              <el-tag v-if="scope.row.is_default" type="success">是</el-tag>
-              <el-tag v-else type="info">否</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="150">
-            <template #default="scope">
-              <el-button size="small" @click="useTemplate(scope.row.id)">使用</el-button>
-              <el-button size="small" type="danger" @click="deleteTemplate(scope.row.id)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+      <!-- 模板生成方式 -->
+      <div v-if="activeTab === 'template'">
+        <!-- 模板上传区域 -->
+        <el-divider content-position="left">上传报告模板</el-divider>
+        <div class="upload-section">
+          <div 
+            class="upload-area" 
+            :class="{ 'drag-over': isDragOver }"
+            @drop.prevent="handleDrop"
+            @dragover.prevent="isDragOver = true"
+            @dragleave.prevent="isDragOver = false"
+          >
+            <input 
+              type="file" 
+              class="upload-input" 
+              accept=".md,.txt"
+              @change="handleFileSelect"
+            />
+            <div class="upload-content">
+              <el-icon class="upload-icon" size="48">
+                <Upload />
+              </el-icon>
+              <p>点击或拖拽上传报告模板文件</p>
+              <p class="upload-hint">支持 .md 或 .txt 格式</p>
+            </div>
+          </div>
+          
+          <!-- 解析结果展示 -->
+          <div v-if="parsedFocusContent" class="focus-content">
+            <el-divider content-position="left">【重点关注】内容</el-divider>
+            <el-card class="focus-card">
+              <p>{{ parsedFocusContent }}</p>
+            </el-card>
+          </div>
+          
+          <!-- 问题列表 -->
+          <div v-if="generatedQuestions.length > 0" class="questions-section">
+            <el-divider content-position="left">生成的问题列表</el-divider>
+            <el-checkbox-group v-model="selectedQuestions" class="questions-group">
+              <el-checkbox 
+                v-for="(question, index) in generatedQuestions" 
+                :key="index"
+                :label="question"
+              >
+                {{ index + 1 }}. {{ question }}
+              </el-checkbox>
+            </el-checkbox-group>
+          </div>
+          
+          <!-- 操作按钮 -->
+          <div class="template-actions">
+            <el-button 
+              type="primary" 
+              @click="generateQuestions" 
+              :loading="isGeneratingQuestions"
+              :disabled="!parsedFocusContent"
+            >
+              {{ isGeneratingQuestions ? '生成中...' : '生成问题列表' }}
+            </el-button>
+            <el-button 
+              type="success" 
+              @click="generateReportFromTemplate" 
+              :loading="isGeneratingReport"
+              :disabled="selectedQuestions.length === 0"
+            >
+              {{ isGeneratingReport ? '生成报告中...' : '生成报告' }}
+            </el-button>
+          </div>
+        </div>
       </div>
       
-      <!-- 报告生成 -->
-      <el-divider content-position="left">报告生成</el-divider>
-      <el-form :model="reportForm" label-width="80px" class="report-form">
-        <el-form-item label="报告名称">
-          <el-input v-model="reportForm.name" placeholder="请输入报告名称" />
-        </el-form-item>
+      <!-- 会话汇总方式 -->
+      <div v-if="activeTab === 'chat'">
+        <el-divider content-position="left">选择历史会话</el-divider>
         
-        <el-form-item label="分析结果">
-          <el-select
-            v-model="reportForm.analysis_result_ids"
-            multiple
-            placeholder="请选择分析结果"
+        <!-- 会话列表 -->
+        <div class="chat-section">
+          <el-table 
+            :data="chatRecords" 
             style="width: 100%"
+            :row-key="(record: any) => record.id"
+            :default-sort="{ prop: 'create_time', order: 'descending' }"
+            @selection-change="handleChatSelectionChange"
           >
-            <el-option
-              v-for="result in analysisResults"
-              :key="result.id"
-              :label="result.name || `分析_${result.id}`"
-              :value="result.id"
-            />
-          </el-select>
-        </el-form-item>
+            <el-table-column type="selection" width="55" />
+            <el-table-column prop="question" label="问题" min-width="200" />
+            <el-table-column prop="tool" label="工具类型" width="100">
+              <template #default="scope">
+                <el-tag :type="scope.row.tool === 'chat' ? 'primary' : 'success'">
+                  {{ scope.row.tool === 'chat' ? '智能问数' : '数据分析' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="datasource_name" label="数据源" width="150" />
+            <el-table-column prop="create_time" label="创建时间" width="180" />
+          </el-table>
+        </div>
         
-        <el-form-item label="对话记录">
-          <el-select
-            v-model="reportForm.chat_record_ids"
-            multiple
-            placeholder="请选择对话记录"
-            style="width: 100%"
+        <!-- 操作按钮 -->
+        <div class="chat-actions">
+          <el-button 
+            type="success" 
+            @click="generateReportFromChats" 
+            :loading="isGeneratingReport"
+            :disabled="selectedChatRecords.length === 0"
           >
-            <!-- 实际项目中应该从API获取对话记录列表 -->
-            <el-option label="测试对话 1" value="1" />
-            <el-option label="测试对话 2" value="2" />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item label="报告模板">
-          <el-select v-model="reportForm.template_id" placeholder="请选择报告模板">
-            <el-option
-              v-for="template in reportTemplates"
-              :key="template.id"
-              :label="template.name"
-              :value="template.id"
-            />
-          </el-select>
-        </el-form-item>
-        
-        <el-form-item>
-          <el-button type="primary" @click="createReport" :loading="isGenerating">
-            {{ isGenerating ? '生成中...' : '生成报告' }}
+            {{ isGeneratingReport ? '生成报告中...' : '生成综合报告' }}
           </el-button>
-        </el-form-item>
-      </el-form>
+        </div>
+      </div>
       
       <!-- 生成的报告 -->
       <div v-if="generatedReport" class="generated-report">
         <el-divider content-position="left">生成的报告</el-divider>
         <el-card class="report-content">
+          <div class="report-header">
+            <h3>{{ generatedReport.name }}</h3>
+            <span class="report-time">{{ generatedReport.create_time }}</span>
+          </div>
           <div class="markdown-content" v-html="renderMarkdown(generatedReport.report_content || '')"></div>
           <div class="report-actions">
             <el-button type="primary" @click="editReport">编辑</el-button>
@@ -114,72 +158,191 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
+import { Upload } from '@element-plus/icons-vue';
 import { dataAgentApi } from '@/api/dataAgent';
-import type { 
-  AnalysisResultResponse, 
-  ReportResponse, 
-  ReportCreateRequest,
-  ReportTemplateResponse
-} from '@/api/dataAgent';
+import { chatApi } from '@/api/chat';
+import type { ReportResponse } from '@/api/dataAgent';
 
-// 报告生成表单
-const reportForm = reactive<ReportCreateRequest>({
-  name: '',
-  analysis_result_ids: [],
-  chat_record_ids: [],
-  template_id: undefined
-});
+// 当前激活的标签页
+const activeTab = ref('template');
 
-// 分析结果列表
-const analysisResults = ref<AnalysisResultResponse[]>([]);
-// 报告模板列表
-const reportTemplates = ref<ReportTemplateResponse[]>([]);
-// 报告列表
-const reports = ref<ReportResponse[]>([]);
-// 生成的报告
+// 模板上传相关
+const isDragOver = ref(false);
+const parsedFocusContent = ref('');
+const generatedQuestions = ref<string[]>([]);
+const selectedQuestions = ref<string[]>([]);
+const isGeneratingQuestions = ref(false);
+
+// 会话相关
+const chatRecords = ref<any[]>([]);
+const selectedChatRecords = ref<number[]>([]);
+
+// 报告生成相关
+const isGeneratingReport = ref(false);
 const generatedReport = ref<ReportResponse | null>(null);
+const reports = ref<ReportResponse[]>([]);
 
-// 加载状态
-const isGenerating = ref(false);
-
-// 上传模板
-const uploadTemplate = () => {
-  ElMessage.info('上传模板功能开发中');
+// 处理文件拖放
+const handleDrop = (event: DragEvent) => {
+  isDragOver.value = false;
+  const files = event.dataTransfer?.files;
+  if (files && files.length > 0) {
+    processFile(files[0]);
+  }
 };
 
-// 使用模板
-const useTemplate = (templateId: number) => {
-  reportForm.template_id = templateId;
-  ElMessage.success('已选择模板');
+// 处理文件选择
+const handleFileSelect = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const files = target.files;
+  if (files && files.length > 0) {
+    processFile(files[0]);
+  }
 };
 
-// 删除模板
-const deleteTemplate = (_templateId: number) => {
-  ElMessage.info('删除模板功能开发中');
+// 处理文件
+const processFile = async (file: File) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await fetch('/api/v1/data-agent/upload-template', {
+      method: 'POST',
+      body: formData,
+      credentials: 'include'
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      parsedFocusContent.value = result.focus_content || '';
+      generatedQuestions.value = [];
+      selectedQuestions.value = [];
+      ElMessage.success('模板上传成功');
+    } else {
+      ElMessage.error(result.error || '上传失败');
+    }
+  } catch (error) {
+    ElMessage.error('上传失败');
+    console.error('上传错误:', error);
+  }
 };
 
-// 创建报告
-const createReport = async () => {
-  if (!reportForm.name || (!reportForm.analysis_result_ids && !reportForm.chat_record_ids)) {
-    ElMessage.warning('请输入报告名称并选择分析结果或对话记录');
+// 生成问题列表
+const generateQuestions = async () => {
+  if (!parsedFocusContent.value) {
+    ElMessage.warning('请先上传模板');
     return;
   }
   
-  isGenerating.value = true;
+  isGeneratingQuestions.value = true;
   try {
-    const response = await dataAgentApi.createReport(reportForm);
-    ElMessage.success('报告生成成功');
+    const response = await dataAgentApi.generateQuestions({
+      focus_content: parsedFocusContent.value
+    });
+    
+    if (response.success) {
+      generatedQuestions.value = response.questions || [];
+      selectedQuestions.value = [...generatedQuestions.value];
+      ElMessage.success('问题生成成功');
+    } else {
+      ElMessage.error(response.error || '生成失败');
+    }
+  } catch (error) {
+    ElMessage.error('生成失败');
+    console.error('生成问题错误:', error);
+  } finally {
+    isGeneratingQuestions.value = false;
+  }
+};
+
+// 从模板生成报告
+const generateReportFromTemplate = async () => {
+  if (selectedQuestions.value.length === 0) {
+    ElMessage.warning('请选择问题');
+    return;
+  }
+  
+  isGeneratingReport.value = true;
+  try {
+    const response = await dataAgentApi.generateReportFromTemplate({
+      name: `报告_${new Date().toLocaleDateString()}`,
+      questions: selectedQuestions.value
+    });
+    
     generatedReport.value = response;
+    ElMessage.success('报告生成成功');
     
     // 刷新报告列表
     await loadReports();
   } catch (error) {
-    ElMessage.error('报告生成过程中出现错误');
-    console.error('报告生成错误:', error);
+    ElMessage.error('生成报告失败');
+    console.error('生成报告错误:', error);
   } finally {
-    isGenerating.value = false;
+    isGeneratingReport.value = false;
+  }
+};
+
+// 加载会话记录
+const loadChatRecords = async () => {
+  try {
+    // 从会话管理API获取会话记录
+    const chatList = await chatApi.list();
+    
+    const records: any[] = [];
+    chatList.forEach((chat: any) => {
+      if (chat && chat.records && Array.isArray(chat.records)) {
+        chat.records.forEach((record: any) => {
+          // 只收集有问题内容的记录（排除第一条空记录）
+          if (record && record.id && record.question && record.question.trim()) {
+            records.push({
+              id: record.id,
+              question: record.question,
+              tool: record.analysis_record_id ? 'analysis' : 'chat',
+              datasource_name: chat.datasource_name || '未知数据源',
+              create_time: record.create_time
+            });
+          }
+        });
+      }
+    });
+    
+    chatRecords.value = records;
+  } catch (error) {
+    console.error('加载会话记录失败:', error);
+  }
+};
+
+// 处理会话选择变化
+const handleChatSelectionChange = (val: any[]) => {
+  selectedChatRecords.value = val.map((item: any) => item.id);
+};
+
+// 从会话生成报告
+const generateReportFromChats = async () => {
+  if (selectedChatRecords.value.length === 0) {
+    ElMessage.warning('请选择会话');
+    return;
+  }
+  
+  isGeneratingReport.value = true;
+  try {
+    const response = await dataAgentApi.generateReportFromChats({
+      name: `综合报告_${new Date().toLocaleDateString()}`,
+      chat_record_ids: selectedChatRecords.value
+    });
+    
+    generatedReport.value = response;
+    ElMessage.success('报告生成成功');
+    
+    // 刷新报告列表
+    await loadReports();
+  } catch (error) {
+    ElMessage.error('生成报告失败');
+    console.error('生成报告错误:', error);
+  } finally {
+    isGeneratingReport.value = false;
   }
 };
 
@@ -222,34 +385,13 @@ const deleteReport = (_reportId: number) => {
 
 // 渲染Markdown
 const renderMarkdown = (content: string) => {
-  // 简单的Markdown渲染，实际项目中可以使用专门的Markdown渲染库
   return content
     .replace(/^# (.*$)/gim, '<h1>$1</h1>')
     .replace(/^## (.*$)/gim, '<h2>$1</h2>')
     .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-    .replace(/\*(.*?)\*/gim, '<strong>$1</strong>')
     .replace(/\n/gim, '<br>');
-};
-
-// 加载分析结果列表
-const loadAnalysisResults = async () => {
-  try {
-    const response = await dataAgentApi.getAnalysisResults();
-    analysisResults.value = response.items;
-  } catch (error) {
-    console.error('加载分析结果失败:', error);
-  }
-};
-
-// 加载报告模板列表
-const loadReportTemplates = async () => {
-  try {
-    const response = await dataAgentApi.getReportTemplates();
-    reportTemplates.value = response;
-  } catch (error) {
-    console.error('加载报告模板失败:', error);
-  }
 };
 
 // 加载报告列表
@@ -264,9 +406,8 @@ const loadReports = async () => {
 
 // 页面加载时获取数据
 onMounted(async () => {
-  await loadAnalysisResults();
-  await loadReportTemplates();
   await loadReports();
+  await loadChatRecords();
 });
 </script>
 
@@ -286,14 +427,90 @@ onMounted(async () => {
   align-items: center;
 }
 
-.template-section {
+.report-tabs {
+  margin-left: auto;
+}
+
+/* 上传区域 */
+.upload-section {
   margin-bottom: 30px;
 }
 
-.report-form {
-  margin-bottom: 30px;
+.upload-area {
+  border: 2px dashed #d9d9d9;
+  border-radius: 8px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s;
+  background-color: #fafafa;
 }
 
+.upload-area:hover,
+.upload-area.drag-over {
+  border-color: #006633;
+  background-color: #f0f9f4;
+}
+
+.upload-input {
+  display: none;
+}
+
+.upload-content {
+  color: #666;
+}
+
+.upload-icon {
+  color: #006633;
+  margin-bottom: 16px;
+}
+
+.upload-hint {
+  font-size: 12px;
+  color: #999;
+  margin-top: 8px;
+}
+
+/* 重点关注内容 */
+.focus-content {
+  margin-top: 20px;
+}
+
+.focus-card {
+  background-color: #fffbe6;
+  border: 1px solid #ffe58f;
+}
+
+.focus-card p {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* 问题列表 */
+.questions-section {
+  margin-top: 20px;
+}
+
+.questions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 操作按钮 */
+.template-actions,
+.chat-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 12px;
+}
+
+/* 会话列表 */
+.chat-section {
+  margin-bottom: 20px;
+}
+
+/* 生成的报告 */
 .generated-report {
   margin-top: 30px;
   margin-bottom: 30px;
@@ -301,6 +518,25 @@ onMounted(async () => {
 
 .report-content {
   position: relative;
+}
+
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.report-header h3 {
+  margin: 0;
+  color: #1f2937;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.report-time {
+  color: #999;
+  font-size: 14px;
 }
 
 .markdown-content {
@@ -317,6 +553,7 @@ onMounted(async () => {
   gap: 10px;
 }
 
+/* Markdown样式 */
 .markdown-content h1 {
   font-size: 24px;
   margin-bottom: 20px;

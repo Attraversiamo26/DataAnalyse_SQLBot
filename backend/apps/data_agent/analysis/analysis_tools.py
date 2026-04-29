@@ -6,6 +6,10 @@ import io
 import base64
 from typing import Dict, Any, List
 
+# 设置matplotlib中文字体
+plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']  # 用来正常显示中文标签
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+
 class AnalysisTools:
     """数据分析工具类"""
     

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 from pydantic import BaseModel
 from sqlalchemy import Column, Text, BigInteger, DateTime, Identity
@@ -187,9 +187,10 @@ class FieldObj(BaseModel):
 
 
 class PreviewResponse(BaseModel):
-    fields: List | None = []
-    data: List | None = []
+    fields: List[Any] | None = []
+    data: List[Dict[str, Any]] | None = []
     sql: str | None = ''
+    rows: int = 0
 
 
 class FieldInfo(BaseModel):

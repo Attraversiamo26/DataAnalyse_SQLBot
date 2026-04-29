@@ -490,6 +490,8 @@ const props = defineProps<{
   welcome?: string
   appName?: string
   pageEmbedded?: boolean
+  chat_id?: string
+  record_id?: string
 }>()
 const floatPopoverRef = ref()
 const floatPopoverVisible = ref(false)
@@ -1126,6 +1128,37 @@ function jumpCreatChat() {
   }
 }
 
+async function loadChatFromParams() {
+  if (props.chat_id) {
+    try {
+      const chatId = parseInt(props.chat_id)
+      if (!isNaN(chatId)) {
+        // 加载指定的聊天会话
+        const chatInfo = await chatApi.get(chatId)
+        if (chatInfo) {
+          currentChatId.value = chatInfo.id
+          currentChat.value = chatInfo
+          // 如果有record_id，加载对应的记录
+          if (props.record_id) {
+            const recordId = parseInt(props.record_id)
+            if (!isNaN(recordId)) {
+              // 找到对应的记录
+              const record = chatInfo.records.find((r: any) => r.id === recordId)
+              if (record) {
+                // 滚动到对应记录的逻辑可以在这里添加
+                console.log('Loaded record:', record)
+                // 可以在这里触发相关的显示逻辑
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load chat from params:', error)
+    }
+  }
+}
+
 onMounted(() => {
   chatConfig.fetchGlobalConfig()
   if (isPhone.value) {
@@ -1134,7 +1167,10 @@ onMounted(() => {
       registerClickOutside()
     }
   }
-  getChatList(jumpCreatChat)
+  getChatList(() => {
+    jumpCreatChat()
+    loadChatFromParams()
+  })
   assistantPrepareInit()
 })
 </script>

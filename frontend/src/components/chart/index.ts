@@ -1,4 +1,4 @@
-import ChartComponent from './ChartComponent.vue';
+import ChartComponent from './ChartComponent.vue'
 
-export { ChartComponent };
-export default ChartComponent;
+export { ChartComponent }
+export default ChartComponent

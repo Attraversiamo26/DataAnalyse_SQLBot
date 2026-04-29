@@ -29,9 +29,26 @@ from common.audit.schemas.logger_decorator import LogConfig, system_log
 router = APIRouter(tags=["Data Q&A"], prefix="/chat")
 
 
-@router.get("/list", response_model=List[Chat], summary=f"{PLACEHOLDER_PREFIX}get_chat_list")
-async def chats(session: SessionDep, current_user: CurrentUser):
-    return list_chats(session, current_user)
+@router.get("/list", response_model=List[ChatInfo], summary=f"{PLACEHOLDER_PREFIX}get_chat_list")
+async def chats(session: SessionDep, current_user: CurrentUser, current_assistant: CurrentAssistant):
+    def inner():
+        chat_list = list_chats(session, current_user)
+        result = []
+        for chat in chat_list:
+            try:
+                # 使用with_data=True确保获取完整的会话记录
+                chat_info = get_chat_with_records(chart_id=chat.id, session=session, current_user=current_user,
+                                                 current_assistant=current_assistant, with_data=True)
+                result.append(chat_info)
+            except Exception as e:
+                # 如果获取会话记录失败，创建一个基本的ChatInfo对象
+                print(f"Error getting chat records for chat {chat.id}: {str(e)}")
+                chat_info = ChatInfo(**chat.model_dump())
+                chat_info.records = []
+                result.append(chat_info)
+        return result
+    
+    return await asyncio.to_thread(inner)
 
 
 @router.get("/{chart_id}", response_model=ChatInfo, summary=f"{PLACEHOLDER_PREFIX}get_chat")

@@ -5,6 +5,7 @@ from apps.dashboard.api import dashboard_api
 from apps.data_training.api import data_training
 from apps.data_agent.api import router as data_agent_router
 from apps.datasource.api import datasource, table_relation, recommended_problem
+from apps.home.api import router as home_router
 from apps.mcp import mcp
 from apps.system.api import login, user, aimodel, workspace, assistant, parameter, apikey, variable_api, prompt, appearance, embedded
 from apps.terminology.api import terminology
@@ -23,6 +24,7 @@ api_router.include_router(terminology.router)
 api_router.include_router(data_training.router)
 api_router.include_router(datasource)
 api_router.include_router(chat.router)
+api_router.include_router(home_router, prefix="/home", tags=["home"])
 api_router.include_router(dashboard_api.router)
 api_router.include_router(mcp.router)
 api_router.include_router(table_relation)

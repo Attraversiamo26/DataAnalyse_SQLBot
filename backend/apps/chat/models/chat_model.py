@@ -114,7 +114,7 @@ class ChatRecord(SQLModel, table=True):
     sql_answer: str = Field(sa_column=Column(Text, nullable=True))
     sql: str = Field(sa_column=Column(Text, nullable=True))
     sql_exec_result: str = Field(sa_column=Column(Text, nullable=True))
-    data: str = Field(sa_column=Column(Text, nullable=True))
+    data: str = Field(sa_column=Column('data', Text(length=4294967295), nullable=True))
     chart_answer: str = Field(sa_column=Column(Text, nullable=True))
     chart: str = Field(sa_column=Column(Text, nullable=True))
     analysis: str = Field(sa_column=Column(Text, nullable=True))
@@ -167,6 +167,7 @@ class CreateChat(BaseModel):
     question: str = None
     datasource: int = None
     origin: Optional[int] = 0  # 0是页面上，mcp是1，小助手是2
+    chat_type: Optional[str] = "chat"  # 会话类型：chat（智能问数），analysis（数据分析）
 
 
 class RenameChat(BaseModel):

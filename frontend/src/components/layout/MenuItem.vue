@@ -95,7 +95,7 @@ const MenuItem = defineComponent({
       const icon = route.path === path ? iconActive : iconDeActive
       const iconCom: any = iconMap[icon] ? ElIcon : null
       const menuContent = [h('span', null, { default: () => title })]
-      
+
       if (iconCom && iconMap[icon]) {
         menuContent.unshift(
           h(
@@ -107,7 +107,7 @@ const MenuItem = defineComponent({
           )
         )
       }
-      
+
       return h(
         ElMenuItem,
         { index: path, onClick: (e: any) => handleMenuClick(e) },

@@ -1,11 +1,58 @@
 <template>
-  <div class="analysis-container">
-    <el-card class="analysis-card">
-      <template #header>
-        <div class="card-header">
-          <span>数据分析</span>
-        </div>
-      </template>
+  <el-container class="analysis-page-container no-padding">
+    <!-- 侧栏 -->
+    <el-aside v-if="sidebarVisible" class="analysis-sidebar" width="280px">
+      <AnalysisChatList
+        v-model:current-chat-id="currentChatId"
+        v-model:current-chat="currentChat"
+        v-model:loading="isLoadingChat"
+        @on-chat-created="onChatCreated"
+        @onClickHistory="onChatHistory"
+        @onClickSideBarBtn="hideSidebar"
+      />
+    </el-aside>
+    
+    <!-- 主内容区 -->
+    <el-container class="analysis-main-container">
+      <!-- 浮动按钮：当侧边栏隐藏时显示 -->
+      <div v-if="!sidebarVisible" class="analysis-sidebar-toggle">
+        <el-popover
+          :width="280"
+          placement="bottom-start"
+          popper-class="popover-chat_history"
+        >
+          <template #reference>
+            <el-button link type="primary" class="icon-btn" @click="showSidebar">
+              <el-icon>
+                <icon_sidebar_outlined />
+              </el-icon>
+            </el-button>
+          </template>
+          <AnalysisChatList
+            v-model:current-chat-id="currentChatId"
+            v-model:current-chat="currentChat"
+            v-model:loading="isLoadingChat"
+            @on-chat-created="onChatCreated"
+            @onClickHistory="onChatHistory"
+            @onClickSideBarBtn="hideSidebar"
+          />
+        </el-popover>
+        
+        <el-button link type="primary" class="icon-btn" @click="createNewAnalysis">
+          <el-icon>
+            <icon_new_chat_outlined />
+          </el-icon>
+        </el-button>
+      </div>
+      
+      <el-main class="analysis-main">
+        <div class="analysis-container">
+          <el-card class="analysis-card">
+            <template #header>
+              <div class="card-header">
+                <span>数据分析</span>
+              </div>
+            </template>
       
       <el-tabs v-model="activeTab" class="analysis-tabs">
         <!-- 数据基本统计标签页 -->
@@ -485,7 +532,7 @@
               </el-table-column>
               <el-table-column label="操作" width="150">
                 <template #default="scope">
-                  <el-button size="small" @click="viewAnalysisResult(scope.row)">查看</el-button>
+                  <el-button size="small" @click="openResultDialog(scope.row)">查看</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -494,6 +541,225 @@
       </el-tabs>
     </el-card>
   </div>
+      </el-main>
+    </el-container>
+  </el-container>
+  
+  <!-- 分析结果详情弹窗 -->
+  <el-dialog 
+    v-model="resultDialogVisible" 
+    title="分析结果详情" 
+    width="90%" 
+    :close-on-click-modal="false"
+    :fullscreen="false"
+  >
+    <div v-if="selectedAnalysisResult" class="result-dialog-content">
+      <!-- 分析问题 -->
+      <div class="result-query">
+        <h3>分析需求</h3>
+        <p>{{ selectedAnalysisResult.query }}</p>
+      </div>
+      
+      <!-- 分析结果 -->
+      <div class="result-content">
+        <h3>分析结果</h3>
+        
+        <!-- 相关性分析结果 -->
+        <div v-if="selectedResultParsed.correlation_matrix" class="correlation-result">
+          <h4>相关性矩阵</h4>
+          <el-table :data="selectedCorrelationMatrixData" style="width: 100%">
+            <el-table-column prop="column" label="列名" width="120" />
+            <el-table-column 
+              v-for="col in selectedCorrelationColumns" 
+              :key="col" 
+              :prop="col" 
+              :label="col"
+            >
+              <template #default="scope">
+                <span :class="getCorrelationClass(scope.row[col])">{{ scope.row[col].toFixed(4) }}</span>
+              </template>
+            </el-table-column>
+          </el-table>
+          <div v-if="selectedResultParsed.charts && selectedResultParsed.charts.correlation_matrix" class="chart-container">
+            <img :src="selectedResultParsed.charts.correlation_matrix" alt="相关性矩阵热力图" style="width: 100%;" />
+          </div>
+        </div>
+        
+        <!-- 描述性统计分析结果 -->
+        <div v-else-if="selectedResultParsed.stats" class="descriptive-result">
+          <h4>描述性统计结果</h4>
+          <div v-for="(stats, column) in selectedResultParsed.stats" :key="column" class="column-stats">
+            <h5>{{ column }}</h5>
+            <el-table :data="[stats]" style="width: 100%">
+              <el-table-column v-for="(_, key) in stats" :key="key" :prop="key" :label="formatStatKey(key.toString())" />
+            </el-table>
+            <div v-if="selectedResultParsed.charts && selectedResultParsed.charts[column]" class="chart-container">
+              <img :src="selectedResultParsed.charts[column]" :alt="`${column}统计图表`" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 聚类分析结果 -->
+        <div v-else-if="selectedResultParsed.clusters" class="clustering-result">
+          <h4>聚类分析结果</h4>
+          <div v-if="selectedResultParsed.clusters" class="clustering-info">
+            <el-card>
+              <div v-if="selectedResultParsed.clusters.model" class="model-info">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="模型">{{ selectedResultParsed.clusters.model }}</el-descriptions-item>
+                  <el-descriptions-item label="聚类数量">{{ selectedResultParsed.clusters.n_clusters }}</el-descriptions-item>
+                  <el-descriptions-item label="聚类列" :span="2">{{ selectedResultParsed.clusters.cluster_columns?.join(', ') }}</el-descriptions-item>
+                  <el-descriptions-item label="聚类中心" :span="2">
+                    <pre style="margin: 0;">{{ JSON.stringify(selectedResultParsed.clusters.cluster_centers, null, 2) }}</pre>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="聚类计数" :span="2">
+                    <pre style="margin: 0;">{{ JSON.stringify(selectedResultParsed.clusters.cluster_counts, null, 2) }}</pre>
+                  </el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </el-card>
+            <div v-if="selectedResultParsed.charts && selectedResultParsed.charts.clustering" class="chart-container">
+              <img :src="selectedResultParsed.charts.clustering" alt="聚类图表" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 回归分析结果 -->
+        <div v-else-if="selectedResultParsed.regression" class="regression-result">
+          <h4>回归分析结果</h4>
+          <div v-if="selectedResultParsed.regression" class="regression-info">
+            <el-card>
+              <div v-if="selectedResultParsed.regression.model" class="model-info">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="模型">{{ selectedResultParsed.regression.model }}</el-descriptions-item>
+                  <el-descriptions-item label="目标列">{{ selectedResultParsed.regression.target_column }}</el-descriptions-item>
+                  <el-descriptions-item label="特征列" :span="2">{{ selectedResultParsed.regression.feature_columns?.join(', ') }}</el-descriptions-item>
+                  <el-descriptions-item label="均方误差">{{ selectedResultParsed.regression.mse?.toFixed(4) }}</el-descriptions-item>
+                  <el-descriptions-item label="R²分数">{{ selectedResultParsed.regression.r2?.toFixed(4) }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </el-card>
+            <div v-if="selectedResultParsed.charts && selectedResultParsed.charts.regression" class="chart-container">
+              <img :src="selectedResultParsed.charts.regression" alt="回归图表" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 分布分析结果 -->
+        <div v-else-if="selectedResultParsed.distributions" class="distribution-result">
+          <h4>分布分析结果</h4>
+          <div v-for="(dist, column) in selectedResultParsed.distributions" :key="column" class="column-distribution">
+            <h5>{{ column }}</h5>
+            <el-collapse>
+              <el-collapse-item title="分位数">
+                <el-table :data="[dist.quantiles]" style="width: 100%">
+                  <el-table-column v-for="(_, key) in dist.quantiles" :key="key" :prop="key" :label="`${key.toString()}分位数`" />
+                </el-table>
+              </el-collapse-item>
+              <el-collapse-item title="值分布">
+                <el-table :data="Object.entries(dist.value_counts).map(([value, count]) => ({ value, count }))" style="width: 100%">
+                  <el-table-column prop="value" label="值" />
+                  <el-table-column prop="count" label="计数" />
+                </el-table>
+              </el-collapse-item>
+            </el-collapse>
+            <div v-if="selectedResultParsed.charts && selectedResultParsed.charts[column]" class="chart-container">
+              <img :src="selectedResultParsed.charts[column]" :alt="`${column}分布图`" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 异常检测分析结果 -->
+        <div v-else-if="selectedResultParsed.anomalies" class="anomaly-result">
+          <h4>异常检测结果</h4>
+          <div v-for="(anomaly, column) in selectedResultParsed.anomalies" :key="column" class="column-anomaly">
+            <h5>{{ column }}</h5>
+            <el-card class="anomaly-info-card">
+              <div class="anomaly-stats">
+                <el-statistic title="下限值" :value="anomaly.lower_bound" :precision="2" />
+                <el-statistic title="上限值" :value="anomaly.upper_bound" :precision="2" />
+                <el-statistic title="异常值数量" :value="anomaly.outlier_count" />
+              </div>
+              <div class="anomaly-values">
+                <h6>异常值列表：</h6>
+                <div class="outlier-tags">
+                  <el-tag v-for="(val, idx) in anomaly.outliers" :key="idx" type="danger" class="outlier-tag">
+                    {{ val }}
+                  </el-tag>
+                </div>
+              </div>
+            </el-card>
+            <div v-if="selectedResultParsed.charts && selectedResultParsed.charts[column]" class="chart-container">
+              <img :src="selectedResultParsed.charts[column]" :alt="`${column}箱线图`" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 趋势分析结果 -->
+        <div v-else-if="selectedResultParsed.trends" class="trend-result">
+          <h4>趋势分析结果</h4>
+          <div v-for="(_, column) in selectedResultParsed.trends" :key="column" class="column-trend">
+            <h5>{{ column }}</h5>
+            <div v-if="selectedResultParsed.charts && selectedResultParsed.charts[column]" class="chart-container">
+              <img :src="selectedResultParsed.charts[column]" :alt="`${column}趋势图`" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 时间序列分析结果 -->
+        <div v-else-if="selectedResultParsed.time_series" class="time-series-result">
+          <h4>时间序列分析结果</h4>
+          <div v-for="(ts, column) in selectedResultParsed.time_series" :key="column" class="column-time-series">
+            <h5>{{ column }}</h5>
+            <el-card class="ts-stats-card">
+              <div class="ts-stats">
+                <el-statistic title="均值" :value="ts.mean" :precision="2" />
+                <el-statistic title="标准差" :value="ts.std" :precision="2" />
+              </div>
+            </el-card>
+            <div v-if="selectedResultParsed.charts && selectedResultParsed.charts[column]" class="chart-container">
+              <img :src="selectedResultParsed.charts[column]" :alt="`${column}时间序列图`" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 预测分析结果 -->
+        <div v-else-if="selectedResultParsed.predictions" class="prediction-result">
+          <h4>预测分析结果</h4>
+          <div v-if="selectedResultParsed.predictions" class="prediction-info">
+            <el-card>
+              <div v-if="selectedResultParsed.predictions.model" class="model-info">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="模型">{{ selectedResultParsed.predictions.model }}</el-descriptions-item>
+                  <el-descriptions-item label="目标列">{{ selectedResultParsed.predictions.target_column }}</el-descriptions-item>
+                  <el-descriptions-item label="特征列">{{ selectedResultParsed.predictions.feature_columns?.join(', ') }}</el-descriptions-item>
+                  <el-descriptions-item label="均方误差">{{ selectedResultParsed.predictions.mse?.toFixed(4) }}</el-descriptions-item>
+                  <el-descriptions-item label="R²分数" :span="2">{{ selectedResultParsed.predictions.r2?.toFixed(4) }}</el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </el-card>
+            <div v-if="selectedResultParsed.charts && selectedResultParsed.charts.prediction" class="chart-container">
+              <img :src="selectedResultParsed.charts.prediction" alt="预测图表" style="width: 100%;" />
+            </div>
+          </div>
+        </div>
+        
+        <!-- 其他分析结果 -->
+        <div v-else-if="selectedAnalysisResult.result_data" class="result-data">
+          <pre>{{ selectedAnalysisResult.result_data }}</pre>
+        </div>
+        <div v-else class="no-result">
+          暂无分析结果数据
+        </div>
+      </div>
+      
+      <!-- 分析报告 -->
+      <div class="result-report">
+        <h3>分析报告</h3>
+        <div class="markdown-content" v-html="renderMarkdown(selectedAnalysisResult.result_summary || '')"></div>
+      </div>
+    </div>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -501,6 +767,10 @@ import { ref, reactive, onMounted, computed } from 'vue';
 import { ElMessage } from 'element-plus';
 import { dataAgentApi } from '@/api/dataAgent';
 import { datasourceApi } from '@/api/datasource';
+import { chatApi, ChatInfo } from '@/api/chat';
+import AnalysisChatList from './AnalysisChatList.vue';
+import icon_sidebar_outlined from '@/assets/svg/icon_sidebar_outlined.svg';
+import icon_new_chat_outlined from '@/assets/svg/icon_new_chat_outlined.svg';
 import type { 
   DataAnalysisRequest, 
   DataAnalysisResponse, 
@@ -510,6 +780,162 @@ import type {
   AnalysisTypeResponse,
   AnalysisRequirementRequest
 } from '@/api/dataAgent';
+
+const props = defineProps<{
+  chat_id?: string
+  record_id?: string
+}>()
+
+// 侧栏相关
+const sidebarVisible = ref(true);
+const currentChatId = ref<number | undefined>();
+const currentChat = ref<ChatInfo>(new ChatInfo());
+const isLoadingChat = ref(false);
+
+// 隐藏侧栏
+const hideSidebar = () => {
+  sidebarVisible.value = false;
+};
+
+// 显示侧栏
+const showSidebar = () => {
+  sidebarVisible.value = true;
+};
+
+// 创建新分析
+const createNewAnalysis = () => {
+  currentChatId.value = undefined;
+  currentChat.value = new ChatInfo();
+  // 重置表单
+  dataSourceForm.datasource_id = null;
+  dataSourceForm.table_name = '';
+  dataPreview.value = [];
+  dataColumns.value = [];
+  chatMessages.value = [];
+  analysisResult.value = null;
+};
+
+// 会话创建回调
+const onChatCreated = (chat: ChatInfo) => {
+  console.log('Chat created:', chat);
+};
+
+// 会话历史回调
+const onChatHistory = (chat: ChatInfo) => {
+  console.log('Chat history:', chat);
+  console.log('Records length:', chat.records?.length || 0);
+  
+  // 加载会话数据
+  if (chat.datasource) {
+    dataSourceForm.datasource_id = chat.datasource;
+    loadTables();
+  }
+  
+  // 检查会话记录
+  if (chat.records && chat.records.length > 0) {
+    // 获取最新的记录（不依赖 analysis 字段）
+    const latestAnalysisRecord = [...chat.records].reverse()[0];
+    
+    console.log('Latest analysis record:', latestAnalysisRecord);
+    console.log('Record has analysis:', !!latestAnalysisRecord.analysis);
+    
+    if (latestAnalysisRecord) {
+      const formatTimestamp = (date: string | Date | undefined): string => {
+        if (!date) return new Date().toISOString();
+        if (date instanceof Date) return date.toISOString();
+        return date;
+      };
+      
+      // 填充聊天消息
+      const messages = [
+        {
+          role: 'user',
+          content: latestAnalysisRecord.question || chat.brief || '数据分析请求',
+          timestamp: formatTimestamp(latestAnalysisRecord.create_time)
+        }
+      ];
+      
+      // 如果有分析报告，添加系统回复
+      if (latestAnalysisRecord.analysis) {
+        try {
+          const analysisData = typeof latestAnalysisRecord.analysis === 'string' 
+            ? JSON.parse(latestAnalysisRecord.analysis) 
+            : latestAnalysisRecord.analysis;
+          if (analysisData.content) {
+            messages.push({
+              role: 'system',
+              content: analysisData.content,
+              timestamp: formatTimestamp(latestAnalysisRecord.finish_time || latestAnalysisRecord.create_time)
+            });
+          }
+        } catch (e) {
+          console.error('解析分析报告失败:', e);
+        }
+      }
+      
+      chatMessages.value = messages;
+      
+      // 处理分析结果
+      if (latestAnalysisRecord.analysis) {
+        let analysisData;
+        try {
+          analysisData = typeof latestAnalysisRecord.analysis === 'string' 
+            ? JSON.parse(latestAnalysisRecord.analysis)
+            : latestAnalysisRecord.analysis;
+        } catch (e) {
+          console.error('解析分析数据失败:', e);
+        }
+        
+        if (analysisData) {
+          // 添加系统回复
+          chatMessages.value.push({
+            role: 'system',
+            content: analysisData.content || analysisData.report || '分析完成',
+            timestamp: formatTimestamp(latestAnalysisRecord.finish_time || latestAnalysisRecord.create_time)
+          });
+          
+          // 设置分析结果
+          if (analysisData.content) {
+            try {
+              const result = JSON.parse(analysisData.content);
+              analysisResult.value = {
+                success: true,
+                result: result,
+                report: analysisData.report,
+                analysis_id: latestAnalysisRecord.id
+              };
+            } catch (e) {
+              analysisResult.value = {
+                success: true,
+                result: analysisData.content,
+                report: analysisData.report,
+                analysis_id: latestAnalysisRecord.id
+              };
+            }
+          } else if (analysisData.report) {
+            analysisResult.value = {
+              success: true,
+              result: '',
+              report: analysisData.report,
+              analysis_id: latestAnalysisRecord.id
+            };
+          }
+        } else {
+          // 如果 analysis 字段存在但解析失败
+          chatMessages.value.push({
+            role: 'system',
+            content: '分析完成',
+            timestamp: formatTimestamp(latestAnalysisRecord.finish_time || latestAnalysisRecord.create_time)
+          });
+        }
+      }
+    }
+      
+      // 切换到分析标签页
+      activeTab.value = 'analysis';
+      resultTab.value = 'result';
+    }
+  }
 
 // 聊天消息
 const chatMessages = ref<Array<{ role: 'user' | 'system'; content: string; timestamp: string }>>([]);
@@ -544,6 +970,10 @@ const analysisSuggestions = ref<string[]>([
 // 分析结果
 const analysisResult = ref<DataAnalysisResponse | null>(null);
 const analysisResults = ref<AnalysisResultResponse[]>([]);
+
+// 分析结果详情弹窗
+const resultDialogVisible = ref(false);
+const selectedAnalysisResult = ref<AnalysisResultResponse | null>(null);
 
 // 数据基本统计结果
 const basicStatsResult = ref<DataBasicStatsResponse | null>(null);
@@ -822,7 +1252,7 @@ const analyzeData = async (query: string) => {
       datasource_id: dataSourceForm.datasource_id ?? undefined,
       table_name: dataSourceForm.table_name,
       analysis_type: analysisForm.analysis_type || undefined,
-      selected_columns: analysisForm.selected_columns.length > 0 ? analysisForm.selected_columns : undefined
+      selected_columns: analysisForm.selected_columns.length > 0 ? analysisForm.selected_columns : undefined,
     };
     
     console.log('分析请求参数:', request);
@@ -871,27 +1301,37 @@ const analyzeData = async (query: string) => {
 
 // 查看分析结果
 const viewAnalysisResult = (result: AnalysisResultResponse) => {
-  if (result.result_summary) {
-    analysisResult.value = {
-      success: result.status === 'success',
-      result: result.result_data || '',
-      report: result.result_summary || '',
-      analysis_id: result.id
-    };
-    
-    chatMessages.value = [
-      {
-        role: 'user',
-        content: result.query || '',
-        timestamp: result.create_time
-      },
-      {
-        role: 'system',
-        content: result.result_summary || '分析完成',
-        timestamp: result.create_time
-      }
-    ];
-  }
+  // 设置分析结果（即使没有result_summary也要显示）
+  analysisResult.value = {
+    success: result.status === 'success',
+    result: result.result_data || '',
+    report: result.result_summary || '',
+    analysis_id: result.id
+  };
+  
+  chatMessages.value = [
+    {
+      role: 'user',
+      content: result.query || '',
+      timestamp: result.create_time
+    },
+    {
+      role: 'system',
+      content: result.result_summary || result.result_data || '分析完成',
+      timestamp: result.create_time
+    }
+  ];
+  
+  // 切换到分析结果标签页，显示分析内容
+  activeTab.value = 'analysis';
+  // 切换到分析结果子标签页（使用正确的变量名）
+  resultTab.value = 'result';
+};
+
+// 打开分析结果详情弹窗
+const openResultDialog = (result: AnalysisResultResponse) => {
+  selectedAnalysisResult.value = result;
+  resultDialogVisible.value = true;
 };
 
 // 加载分析结果列表
@@ -1100,6 +1540,32 @@ const parsedAnalysisResult = computed(() => {
   }
 });
 
+// 弹窗中选中分析结果的解析数据
+const selectedResultParsed = computed(() => {
+  if (!selectedAnalysisResult.value || !selectedAnalysisResult.value.result_data) return {};
+  try {
+    return JSON.parse(selectedAnalysisResult.value.result_data);
+  } catch (e) {
+    return {};
+  }
+});
+
+// 弹窗中相关性矩阵数据
+const selectedCorrelationMatrixData = computed(() => {
+  if (!selectedResultParsed.value.correlation_matrix) return [];
+  const matrix = selectedResultParsed.value.correlation_matrix as Record<string, Record<string, number>>;
+  return Object.entries(matrix).map(([column, values]) => ({
+    column,
+    ...values
+  }));
+});
+
+// 弹窗中相关性列名
+const selectedCorrelationColumns = computed(() => {
+  if (!selectedResultParsed.value.correlation_matrix) return [];
+  return Object.keys(selectedResultParsed.value.correlation_matrix as Record<string, Record<string, number>>);
+});
+
 // 判断是否为描述性统计分析
 const isDescriptiveAnalysis = computed(() => {
   return parsedAnalysisResult.value.analysis_type === 'descriptive';
@@ -1203,12 +1669,86 @@ const getCorrelationClass = (value: number) => {
   return 'correlation-negative-high';
 };
 
+// 从URL参数加载分析会话
+async function loadAnalysisFromParams() {
+  if (props.chat_id) {
+    try {
+      const chatId = parseInt(props.chat_id)
+      if (!isNaN(chatId)) {
+        // 加载指定的聊天会话
+        const chatInfo = await chatApi.get(chatId)
+        console.log('Chat info:', chatInfo)
+        if (chatInfo && chatInfo.records) {
+          // 找到对应的分析记录
+          if (props.record_id) {
+            const recordId = parseInt(props.record_id)
+            if (!isNaN(recordId)) {
+              const record = chatInfo.records.find((r: any) => r.id === recordId && r.analysis_record_id)
+              console.log('Found record:', record)
+              if (record) {
+                // 切换到分析标签页
+                activeTab.value = 'analysis'
+                
+                // 设置数据源
+                if (chatInfo.datasource) {
+                  dataSourceForm.datasource_id = chatInfo.datasource
+                  // 加载表列表
+                  await loadTables()
+                }
+                
+                // 解析analysis字段（后端存储为JSON字符串）
+                let analysisContent = ''
+                if (record.analysis) {
+                  try {
+                    const analysisObj = JSON.parse(record.analysis)
+                    analysisContent = analysisObj.content || ''
+                  } catch {
+                    analysisContent = record.analysis
+                  }
+                }
+                
+                // 设置聊天消息
+                const systemContent = analysisContent || record.data || '分析完成'
+                console.log('System content:', systemContent)
+                chatMessages.value = [
+                  {
+                    role: 'user',
+                    content: record.question || '',
+                    timestamp: record.create_time ? record.create_time.toString() : ''
+                  },
+                  {
+                    role: 'system',
+                    content: systemContent,
+                    timestamp: record.finish_time ? record.finish_time.toString() : record.create_time ? record.create_time.toString() : ''
+                  }
+                ]
+                
+                // 设置分析结果
+                analysisResult.value = {
+                  success: true,
+                  result: record.data || '',
+                  report: analysisContent || '',
+                  analysis_id: record.analysis_record_id || undefined
+                }
+                console.log('Analysis result:', analysisResult.value)
+              }
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load analysis from params:', error)
+    }
+  }
+}
+
 // 页面加载时获取数据
 onMounted(async () => {
   try {
     await loadDatasources();
     await loadAnalysisTypes();
     await loadAnalysisResults();
+    await loadAnalysisFromParams();
   } catch (error) {
     console.error('页面初始化失败:', error);
   }
@@ -1216,8 +1756,60 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.analysis-page-container {
+  height: 100%;
+  width: 100%;
+}
+
+.analysis-sidebar {
+  background: rgba(245, 246, 247, 1);
+  border-right: 1px solid #e0e0e0;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.analysis-sidebar-toggle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 11;
+  padding: 16px;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  
+  .icon-btn {
+    min-width: unset;
+    width: 26px;
+    height: 26px;
+    font-size: 18px;
+    
+    --ed-button-text-color: rgba(31, 35, 41, 1);
+    --ed-button-hover-text-color: var(--ed-button-text-color);
+    --ed-button-active-text-color: var(--ed-button-text-color);
+    --ed-button-hover-link-text-color: var(--ed-button-text-color);
+    
+    &:hover {
+      background: rgba(31, 35, 41, 0.1);
+    }
+  }
+}
+
+.analysis-main-container {
+  flex: 1;
+  position: relative;
+}
+
+.analysis-main {
+  padding: 0;
+  overflow: auto;
+}
+
 .analysis-container {
   padding: 20px;
+  padding-left: 96px;
+  height: 100%;
 }
 
 .analysis-card {

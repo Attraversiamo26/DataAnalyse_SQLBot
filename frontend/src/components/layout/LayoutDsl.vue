@@ -69,7 +69,8 @@ onBeforeMount(() => {
 <template>
   <div class="system-layout">
     <div class="left-side" :class="collapse && 'left-side-collapse'">
-      <template v-if="showSysmenu">
+      <div class="left-content">
+        <template v-if="showSysmenu">
         <div class="sys-management" @click="toUserIndex">
           <img
             v-if="loginBg"
@@ -204,6 +205,7 @@ onBeforeMount(() => {
       </template>
       <Workspace v-if="!showSysmenu" :collapse="collapse"></Workspace>
       <Menu :collapse="collapseCopy"></Menu>
+      </div>
       <div class="bottom">
         <div
           v-if="showSysmenu"
@@ -255,6 +257,15 @@ onBeforeMount(() => {
     padding: 16px;
     position: relative;
     min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .left-content {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
 
     .default-sqlbot {
       display: flex;
@@ -281,13 +292,13 @@ onBeforeMount(() => {
     }
 
     .bottom {
-      position: absolute;
-      bottom: 20px;
-      left: 16px;
+      padding-top: 16px;
+      background-color: white;
       font-weight: 400;
       font-size: 14px;
       line-height: 22px;
-      width: calc(100% - 32px);
+      width: 100%;
+      flex-shrink: 0;
       .back-to_workspace {
         display: flex;
         align-items: center;
@@ -346,8 +357,8 @@ onBeforeMount(() => {
       }
 
       .bottom {
-        left: 12px;
-        width: calc(100% - 24px);
+        width: 100%;
+        padding-top: 16px;
         .ed-icon {
           margin-right: 0;
         }

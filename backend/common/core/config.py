@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     POSTGRES_SERVER: str = 'localhost'
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = 'postgres'
-    POSTGRES_PASSWORD: str = "Password123@pg"
+    POSTGRES_PASSWORD: str = "dqw19961026"
     POSTGRES_DB: str = "sqlbot"
     # 使用用户提供的 MySQL 配置
     SQLBOT_DB_URL: str = 'mysql+pymysql://root:dqw19961026@localhost:3306/sqlbot?charset=utf8mb4'
