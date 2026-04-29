@@ -90,62 +90,64 @@
         
         <!-- 会话列表 -->
         <div class="chat-section">
-          <el-table 
-            :data="chatRecords" 
-            style="width: 100%"
-            :row-key="(record: any) => record.id"
-            :default-sort="{ prop: 'create_time', order: 'descending' }"
-            @selection-change="handleChatSelectionChange"
-            border
-          >
-            <el-table-column type="selection" width="55" fixed="left" />
-            <el-table-column prop="tool" label="工具类型" width="100" fixed="left">
-              <template #default="scope">
-                <el-tag :type="scope.row.tool === 'chat' ? 'primary' : 'success'">
-                  {{ scope.row.tool === 'chat' ? '智能问数' : '数据分析' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="question" label="问题" width="300" fixed="left" show-overflow-tooltip />
-            <el-table-column prop="datasource_name" label="数据源" width="150" />
-            <el-table-column prop="create_time" label="创建时间" width="180" />
-            <el-table-column prop="finish_time" label="结束时间" width="180" />
-            <el-table-column prop="status" label="状态" width="100">
-              <template #default="scope">
-                <el-tag :type="scope.row.status === 'completed' ? 'success' : 'warning'">
-                  {{ scope.row.status === 'completed' ? '已完成' : '处理中' }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="result" label="返回结果" min-width="200" show-overflow-tooltip>
-              <template #default="scope">
-                <div :class="scope.row.result === '失败' ? 'result-failed' : 'result-content'">
-                  {{ scope.row.result }}
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="180" fixed="right">
-              <template #default="scope">
-                <div class="table-operate">
-                  <el-button 
-                    size="small" 
-                    type="success" 
-                    @click="viewChatDetail(scope.row)"
-                    style="margin-right: 8px;"
-                  >
-                    查看
-                  </el-button>
-                  <el-button 
-                    size="small" 
-                    type="danger" 
-                    @click="deleteChatRecord(scope.row)"
-                  >
-                    删除
-                  </el-button>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
+          <div class="table-wrapper">
+            <el-table 
+              :data="chatRecords" 
+              fit
+              :row-key="(record: any) => record.id"
+              :default-sort="{ prop: 'create_time', order: 'descending' }"
+              @selection-change="handleChatSelectionChange"
+              border
+            >
+              <el-table-column type="selection" min-width="40" />
+              <el-table-column prop="tool" label="工具类型" min-width="90">
+                <template #default="scope">
+                  <el-tag :type="scope.row.tool === 'chat' ? 'primary' : 'success'">
+                    {{ scope.row.tool === 'chat' ? '智能问数' : '数据分析' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="question" label="问题" min-width="200" show-overflow-tooltip />
+              <el-table-column prop="datasource_name" label="数据源" min-width="100" />
+              <el-table-column prop="create_time" label="创建时间" min-width="160" />
+              <el-table-column prop="finish_time" label="结束时间" min-width="160" />
+              <el-table-column prop="status" label="状态" min-width="80">
+                <template #default="scope">
+                  <el-tag :type="scope.row.status === 'completed' ? 'success' : 'warning'">
+                    {{ scope.row.status === 'completed' ? '已完成' : '处理中' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="result" label="返回结果" min-width="150" show-overflow-tooltip>
+                <template #default="scope">
+                  <div :class="scope.row.result === '失败' ? 'result-failed' : 'result-content'">
+                    {{ scope.row.result }}
+                  </div>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" min-width="140">
+                <template #default="scope">
+                  <div class="table-operate">
+                    <el-button 
+                      size="small" 
+                      type="success" 
+                      @click="viewChatDetail(scope.row)"
+                      style="margin-right: 8px;"
+                    >
+                      查看
+                    </el-button>
+                    <el-button 
+                      size="small" 
+                      type="danger" 
+                      @click="deleteChatRecord(scope.row)"
+                    >
+                      删除
+                    </el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
         </div>
         
         <!-- 操作按钮 -->
@@ -924,6 +926,12 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* 表格包装器 */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
 }
 
 /* 表格操作列 */
