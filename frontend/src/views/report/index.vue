@@ -85,68 +85,70 @@
       </div>
       
       <!-- 会话汇总方式 -->
-      <div v-if="activeTab === 'chat'">
-        <el-divider content-position="left">选择历史会话</el-divider>
-        
-        <!-- 会话列表 -->
-        <div class="chat-section">
-          <div class="table-wrapper">
-            <el-table 
-              :data="chatRecords" 
-              fit
-              :row-key="(record: any) => record.id"
-              :default-sort="{ prop: 'create_time', order: 'descending' }"
-              @selection-change="handleChatSelectionChange"
-              border
-            >
-              <el-table-column type="selection" min-width="40" />
-              <el-table-column prop="tool" label="工具类型" min-width="90">
-                <template #default="scope">
-                  <el-tag :type="scope.row.tool === 'chat' ? 'primary' : 'success'">
-                    {{ scope.row.tool === 'chat' ? '智能问数' : '数据分析' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="question" label="问题" min-width="200" show-overflow-tooltip />
-              <el-table-column prop="datasource_name" label="数据源" min-width="100" />
-              <el-table-column prop="create_time" label="创建时间" min-width="160" />
-              <el-table-column prop="finish_time" label="结束时间" min-width="160" />
-              <el-table-column prop="status" label="状态" min-width="80">
-                <template #default="scope">
-                  <el-tag :type="scope.row.status === 'completed' ? 'success' : 'warning'">
-                    {{ scope.row.status === 'completed' ? '已完成' : '处理中' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column prop="result" label="返回结果" min-width="150" show-overflow-tooltip>
-                <template #default="scope">
-                  <div :class="scope.row.result === '失败' ? 'result-failed' : 'result-content'">
-                    {{ scope.row.result }}
-                  </div>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" min-width="140">
-                <template #default="scope">
-                  <div class="table-operate">
-                    <el-button 
-                      size="small" 
-                      type="success" 
-                      @click="viewChatDetail(scope.row)"
-                      style="margin-right: 8px;"
-                    >
-                      查看
-                    </el-button>
-                    <el-button 
-                      size="small" 
-                      type="danger" 
-                      @click="deleteChatRecord(scope.row)"
-                    >
-                      删除
-                    </el-button>
-                  </div>
-                </template>
-              </el-table-column>
-            </el-table>
+      <div v-if="activeTab === 'chat'" class="chat-summary-container">
+        <div class="chat-content">
+          <el-divider content-position="left">选择历史会话</el-divider>
+          
+          <!-- 会话列表 -->
+          <div class="chat-section">
+            <div class="table-wrapper">
+              <el-table 
+                :data="chatRecords" 
+                fit
+                :row-key="(record: any) => record.id"
+                :default-sort="{ prop: 'create_time', order: 'descending' }"
+                @selection-change="handleChatSelectionChange"
+                border
+              >
+                <el-table-column type="selection" min-width="40" />
+                <el-table-column prop="tool" label="工具类型" min-width="90">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.tool === 'chat' ? 'primary' : 'success'">
+                      {{ scope.row.tool === 'chat' ? '智能问数' : '数据分析' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="question" label="问题" min-width="200" show-overflow-tooltip />
+                <el-table-column prop="datasource_name" label="数据源" min-width="100" />
+                <el-table-column prop="create_time" label="创建时间" min-width="160" />
+                <el-table-column prop="finish_time" label="结束时间" min-width="160" />
+                <el-table-column prop="status" label="状态" min-width="80">
+                  <template #default="scope">
+                    <el-tag :type="scope.row.status === 'completed' ? 'success' : 'warning'">
+                      {{ scope.row.status === 'completed' ? '已完成' : '处理中' }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="result" label="返回结果" min-width="150" show-overflow-tooltip>
+                  <template #default="scope">
+                    <div :class="scope.row.result === '失败' ? 'result-failed' : 'result-content'">
+                      {{ scope.row.result }}
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" min-width="140">
+                  <template #default="scope">
+                    <div class="table-operate">
+                      <el-button 
+                        size="small" 
+                        type="success" 
+                        @click="viewChatDetail(scope.row)"
+                        style="margin-right: 8px;"
+                      >
+                        查看
+                      </el-button>
+                      <el-button 
+                        size="small" 
+                        type="danger" 
+                        @click="deleteChatRecord(scope.row)"
+                      >
+                        删除
+                      </el-button>
+                    </div>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
           </div>
         </div>
         
@@ -900,12 +902,37 @@ onMounted(async () => {
   overflow: hidden;
 }
 
+/* 会话汇总容器 */
+.chat-summary-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 会话内容区域 */
+.chat-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 /* 表格包装器 */
 .table-wrapper {
   width: 100%;
   overflow-x: auto;
-  max-height: calc(100vh - 280px);
+  max-height: calc(100vh - 380px);
   overflow-y: auto;
+}
+
+/* 操作按钮区域 */
+.chat-actions {
+  position: sticky;
+  bottom: 0;
+  background-color: #ffffff;
+  padding: 16px;
+  border-top: 1px solid #ebeef5;
+  margin-top: 16px;
+  z-index: 10;
 }
 
 /* 生成的报告 */
