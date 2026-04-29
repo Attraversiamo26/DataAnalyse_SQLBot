@@ -414,7 +414,19 @@ const loadSessions = async () => {
             result = parts.length > 0 ? parts.join(' | ') : '失败'
           } else {
             // 智能问数 - 只显示有数据的记录
-            if (record.data && record.data.length > 0) {
+            let hasData = false
+            if (record.data) {
+              // 后端修改后，record.data 是对象，表格数据在 record.data.data 中
+              if (typeof record.data === 'object') {
+                if (Array.isArray(record.data.data) && record.data.data.length > 0) {
+                  hasData = true
+                } else if (Array.isArray(record.data) && record.data.length > 0) {
+                  // 兼容旧格式
+                  hasData = true
+                }
+              }
+            }
+            if (hasData) {
               result = '查询成功'
             } else if (record.sql_answer) {
               result = record.sql_answer.substring(0, 100) + (record.sql_answer.length > 100 ? '...' : '')
@@ -442,13 +454,10 @@ const loadSessions = async () => {
       })
     })
     
-    // 去重逻辑：去除重复问题，如果重复问题则保留工具类型为数据分析的
-    const deduplicatedRecords = deduplicateSessions(records)
-    
-    sessions.value = deduplicatedRecords
-    state.tableData = deduplicatedRecords
-    total.value = deduplicatedRecords.length
-    state.pageInfo.total = deduplicatedRecords.length
+    sessions.value = records
+    state.tableData = records
+    total.value = records.length
+    state.pageInfo.total = records.length
   } catch (error) {
     ElMessage.error('获取会话记录失败')
     console.error('Error loading sessions:', error)
@@ -621,35 +630,6 @@ const handleSizeChange = (size: number) => {
 const handleCurrentChange = (current: number) => {
   state.pageInfo.currentPage = current
   loadSessions()
-}
-
-// 会话去重函数：去除重复问题，如果重复问题则保留工具类型为数据分析的
-const deduplicateSessions = (records: Array<any>): Array<any> => {
-  const questionMap = new Map<string, any>()
-  
-  records.forEach(record => {
-    const question = record.question.trim()
-    
-    if (questionMap.has(question)) {
-      // 已有相同问题的记录，比较工具类型
-      const existing = questionMap.get(question)
-      if (record.tool === 'analysis' && existing.tool !== 'analysis') {
-        // 当前记录是数据分析类型，替换现有记录
-        questionMap.set(question, record)
-      }
-    } else {
-      // 新问题，添加到Map
-      questionMap.set(question, record)
-    }
-  })
-  
-  // 将Map转换为数组
-  const deduplicated = Array.from(questionMap.values())
-  
-  // 按创建时间降序排序
-  deduplicated.sort((a, b) => new Date(b.create_time).getTime() - new Date(a.create_time).getTime())
-  
-  return deduplicated
 }
 
 // 统计有结果数据的会话
