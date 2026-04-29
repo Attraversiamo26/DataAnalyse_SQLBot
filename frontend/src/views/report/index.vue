@@ -791,7 +791,7 @@ onMounted(async () => {
   padding: 20px;
   width: 100%;
   height: calc(100vh - 60px);
-  overflow: hidden;
+  background-color: #ffffff;
 }
 
 .report-card {
@@ -889,12 +889,23 @@ onMounted(async () => {
 :deep(.el-card__body) {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 20px;
+  margin: 0;
 }
 
 /* 会话列表 */
 .chat-section {
   margin-bottom: 20px;
+  overflow: hidden;
+}
+
+/* 表格包装器 */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
 }
 
 /* 生成的报告 */
