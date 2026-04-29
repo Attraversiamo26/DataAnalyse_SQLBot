@@ -442,10 +442,13 @@ const loadSessions = async () => {
       })
     })
     
-    sessions.value = records
-    state.tableData = records
-    total.value = records.length
-    state.pageInfo.total = records.length
+    // 去重逻辑：去除重复问题，如果重复问题则保留工具类型为数据分析的
+    const deduplicatedRecords = deduplicateSessions(records)
+    
+    sessions.value = deduplicatedRecords
+    state.tableData = deduplicatedRecords
+    total.value = deduplicatedRecords.length
+    state.pageInfo.total = deduplicatedRecords.length
   } catch (error) {
     ElMessage.error('获取会话记录失败')
     console.error('Error loading sessions:', error)
@@ -618,6 +621,35 @@ const handleSizeChange = (size: number) => {
 const handleCurrentChange = (current: number) => {
   state.pageInfo.currentPage = current
   loadSessions()
+}
+
+// 会话去重函数：去除重复问题，如果重复问题则保留工具类型为数据分析的
+const deduplicateSessions = (records: Array<any>): Array<any> => {
+  const questionMap = new Map<string, any>()
+  
+  records.forEach(record => {
+    const question = record.question.trim()
+    
+    if (questionMap.has(question)) {
+      // 已有相同问题的记录，比较工具类型
+      const existing = questionMap.get(question)
+      if (record.tool === 'analysis' && existing.tool !== 'analysis') {
+        // 当前记录是数据分析类型，替换现有记录
+        questionMap.set(question, record)
+      }
+    } else {
+      // 新问题，添加到Map
+      questionMap.set(question, record)
+    }
+  })
+  
+  // 将Map转换为数组
+  const deduplicated = Array.from(questionMap.values())
+  
+  // 按创建时间降序排序
+  deduplicated.sort((a, b) => new Date(b.create_time).getTime() - new Date(a.create_time).getTime())
+  
+  return deduplicated
 }
 
 // 统计有结果数据的会话
