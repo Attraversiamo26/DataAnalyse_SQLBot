@@ -96,9 +96,9 @@
             :row-key="(record: any) => record.id"
             :default-sort="{ prop: 'create_time', order: 'descending' }"
             @selection-change="handleChatSelectionChange"
+            border
           >
             <el-table-column type="selection" width="55" />
-            <el-table-column prop="question" label="问题" min-width="200" />
             <el-table-column prop="tool" label="工具类型" width="100">
               <template #default="scope">
                 <el-tag :type="scope.row.tool === 'chat' ? 'primary' : 'success'">
@@ -106,8 +106,35 @@
                 </el-tag>
               </template>
             </el-table-column>
+            <el-table-column prop="question" label="问题" min-width="250" show-overflow-tooltip />
             <el-table-column prop="datasource_name" label="数据源" width="150" />
             <el-table-column prop="create_time" label="创建时间" width="180" />
+            <el-table-column prop="finish_time" label="结束时间" width="180" />
+            <el-table-column prop="status" label="状态" width="100">
+              <template #default="scope">
+                <el-tag :type="scope.row.status === 'completed' ? 'success' : 'warning'">
+                  {{ scope.row.status === 'completed' ? '已完成' : '处理中' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="result" label="返回结果" min-width="200" show-overflow-tooltip>
+              <template #default="scope">
+                <div :class="scope.row.result === '失败' ? 'result-failed' : 'result-content'">
+                  {{ scope.row.result }}
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="120">
+              <template #default="scope">
+                <el-button 
+                  size="small" 
+                  type="primary" 
+                  @click="viewChatDetail(scope.row)"
+                >
+                  查看详情
+                </el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
         
@@ -119,10 +146,38 @@
             :loading="isGeneratingReport"
             :disabled="selectedChatRecords.length === 0"
           >
-            {{ isGeneratingReport ? '生成报告中...' : '生成综合报告' }}
+            {{ isGeneratingReport ? '生成报告中...' : `生成综合报告 (已选${selectedChatRecords.length}条)` }}
           </el-button>
         </div>
       </div>
+      
+      <!-- 会话详情对话框 -->
+      <el-dialog
+        v-model="showChatDetailDialog"
+        :title="`查看会话详情 - ${selectedChatDetail?.tool === 'chat' ? '智能问数' : '数据分析'}`"
+        width="80%"
+        destroy-on-close
+      >
+        <div v-if="selectedChatDetail">
+          <div class="dialog-section">
+            <h3>会话信息</h3>
+            <el-descriptions :column="2" border>
+              <el-descriptions-item label="会话ID">{{ selectedChatDetail.id }}</el-descriptions-item>
+              <el-descriptions-item label="工具类型">{{ selectedChatDetail.tool === 'chat' ? '智能问数' : '数据分析' }}</el-descriptions-item>
+              <el-descriptions-item label="问题">{{ selectedChatDetail.question }}</el-descriptions-item>
+              <el-descriptions-item label="数据源">{{ selectedChatDetail.datasource_name }}</el-descriptions-item>
+              <el-descriptions-item label="创建时间">{{ selectedChatDetail.create_time }}</el-descriptions-item>
+              <el-descriptions-item label="结束时间">{{ selectedChatDetail.finish_time || '未完成' }}</el-descriptions-item>
+              <el-descriptions-item label="状态">{{ selectedChatDetail.status === 'completed' ? '已完成' : '处理中' }}</el-descriptions-item>
+            </el-descriptions>
+          </div>
+          
+          <div class="dialog-section">
+            <h3>返回结果</h3>
+            <div class="result-content-detail">{{ selectedChatDetail.result }}</div>
+          </div>
+        </div>
+      </el-dialog>
       
       <!-- 生成的报告 -->
       <div v-if="generatedReport" class="generated-report">
@@ -178,6 +233,8 @@ const isGeneratingQuestions = ref(false);
 // 会话相关
 const chatRecords = ref<any[]>([]);
 const selectedChatRecords = ref<number[]>([]);
+const showChatDetailDialog = ref(false);
+const selectedChatDetail = ref<any>(null);
 
 // 报告生成相关
 const isGeneratingReport = ref(false);
@@ -287,21 +344,77 @@ const generateReportFromTemplate = async () => {
 // 加载会话记录
 const loadChatRecords = async () => {
   try {
-    // 从会话管理API获取会话记录
-    const chatList = await chatApi.list();
+    // 获取所有聊天会话
+    const chatListResponse = await chatApi.list();
+    
+    const chatInfos: Array<any> = [];
+    for (const chat of chatListResponse) {
+      if (chat.id) {
+        try {
+          const chatInfo = await chatApi.get(chat.id);
+          chatInfos.push(chatInfo);
+        } catch (error) {
+          console.error(`获取会话 ${chat.id} 详情失败:`, error);
+        }
+      }
+    }
     
     const records: any[] = [];
-    chatList.forEach((chat: any) => {
-      if (chat && chat.records && Array.isArray(chat.records)) {
-        chat.records.forEach((record: any) => {
+    chatInfos.forEach((chatInfo: any) => {
+      if (chatInfo && chatInfo.records && Array.isArray(chatInfo.records)) {
+        chatInfo.records.forEach((record: any) => {
           // 只收集有问题内容的记录（排除第一条空记录）
           if (record && record.id && record.question && record.question.trim()) {
+            let result = '';
+            const toolType = chatInfo.chat_type === 'analysis' ? 'analysis' : 'chat';
+            
+            if (toolType === 'analysis') {
+              // 数据分析
+              const parts: string[] = [];
+              if (record.analysis) {
+                try {
+                  const analysisObj = typeof record.analysis === 'string' ? JSON.parse(record.analysis) : record.analysis;
+                  const reportContent = analysisObj.content || analysisObj.report || '';
+                  if (reportContent) {
+                    parts.push(`报告: ${reportContent.substring(0, 100)}${reportContent.length > 100 ? '...' : ''}`);
+                  }
+                } catch (e) {
+                  const analysisStr = typeof record.analysis === 'string' ? record.analysis : JSON.stringify(record.analysis);
+                  parts.push(`报告: ${analysisStr.substring(0, 100)}${analysisStr.length > 100 ? '...' : ''}`);
+                }
+              }
+              result = parts.length > 0 ? parts.join(' | ') : '失败';
+            } else {
+              // 智能问数
+              if (record.data) {
+                const dataObj = typeof record.data === 'string' ? JSON.parse(record.data) : record.data;
+                if (typeof dataObj === 'object' && Array.isArray(dataObj.data) && dataObj.data.length > 0) {
+                  result = '查询成功';
+                } else if (Array.isArray(dataObj) && dataObj.length > 0) {
+                  result = '查询成功';
+                }
+              }
+              if (!result && record.sql_answer) {
+                result = record.sql_answer.substring(0, 100) + (record.sql_answer.length > 100 ? '...' : '');
+              }
+              if (!result && record.chart_answer) {
+                result = record.chart_answer.substring(0, 100) + (record.chart_answer.length > 100 ? '...' : '');
+              }
+              if (!result) {
+                return; // 跳过没有结果的记录
+              }
+            }
+            
             records.push({
               id: record.id,
+              chat_id: chatInfo.id,
               question: record.question,
-              tool: record.analysis_record_id ? 'analysis' : 'chat',
-              datasource_name: chat.datasource_name || '未知数据源',
-              create_time: record.create_time
+              tool: toolType,
+              datasource_name: chatInfo.datasource_name || '未知数据源',
+              create_time: record.create_time,
+              finish_time: record.finish_time || '',
+              status: record.finish ? 'completed' : 'processing',
+              result: result
             });
           }
         });
@@ -317,6 +430,12 @@ const loadChatRecords = async () => {
 // 处理会话选择变化
 const handleChatSelectionChange = (val: any[]) => {
   selectedChatRecords.value = val.map((item: any) => item.id);
+};
+
+// 查看会话详情
+const viewChatDetail = (record: any) => {
+  selectedChatDetail.value = record;
+  showChatDetailDialog.value = true;
 };
 
 // 从会话生成报告
@@ -551,6 +670,36 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* 会话详情对话框 */
+.dialog-section {
+  margin-bottom: 20px;
+  
+  h3 {
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+}
+
+.result-content-detail {
+  padding: 12px;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* 结果样式 */
+.result-content {
+  color: #606266;
+}
+
+.result-failed {
+  color: #f56c6c;
 }
 
 /* Markdown样式 */
