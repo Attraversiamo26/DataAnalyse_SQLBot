@@ -372,7 +372,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { Upload } from '@element-plus/icons-vue';
 import { dataAgentApi } from '@/api/dataAgent';
 import { chatApi } from '@/api/chat';
@@ -617,15 +617,17 @@ const viewChatDetail = async (record: any) => {
           }
           
           if (fullRecord.analysis) {
-            if (typeof fullRecord.analysis === 'string') {
+            const analysisVal = fullRecord.analysis;
+            if (typeof analysisVal === 'string') {
               try {
-                const analysisObj = JSON.parse(fullRecord.analysis);
+                const analysisObj = JSON.parse(analysisVal);
                 resultData = { content: analysisObj.content || analysisObj.report || '' };
               } catch (e) {
-                resultData = { content: fullRecord.analysis };
+                resultData = { content: analysisVal };
               }
-            } else if (typeof fullRecord.analysis === 'object' && fullRecord.analysis.content) {
-              resultData = { content: fullRecord.analysis.content };
+            } else if (typeof analysisVal === 'object' && analysisVal !== null) {
+              const analysisObj = analysisVal as { content?: string };
+              resultData = { content: analysisObj.content || '' };
             }
             resultType = 'analysis';
           }
@@ -676,7 +678,7 @@ const viewChatDetail = async (record: any) => {
 
 // 删除会话记录
 const deleteChatRecord = (record: any) => {
-  ElMessage.confirm('确定要删除这条会话记录吗？', '删除确认', {
+  ElMessageBox.confirm('确定要删除这条会话记录吗？', '删除确认', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
     type: 'warning'
