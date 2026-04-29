@@ -177,14 +177,158 @@
               <el-descriptions-item label="问题">{{ selectedChatDetail.question }}</el-descriptions-item>
               <el-descriptions-item label="数据源">{{ selectedChatDetail.datasource_name }}</el-descriptions-item>
               <el-descriptions-item label="创建时间">{{ selectedChatDetail.create_time }}</el-descriptions-item>
-              <el-descriptions-item label="结束时间">{{ selectedChatDetail.finish_time || '未完成' }}</el-descriptions-item>
-              <el-descriptions-item label="状态">{{ selectedChatDetail.status === 'completed' ? '已完成' : '处理中' }}</el-descriptions-item>
+              <el-descriptions-item label="结束时间" :span="2">{{ selectedChatDetail.finish_time || '未完成' }}</el-descriptions-item>
             </el-descriptions>
           </div>
           
           <div class="dialog-section">
-            <h3>返回结果</h3>
-            <div class="result-content-detail">{{ selectedChatDetail.result }}</div>
+            <h3>结果内容</h3>
+            
+            <!-- 表格结果 -->
+            <div v-if="selectedChatDetail.resultType === 'table' && selectedChatDetail.resultData && Array.isArray(selectedChatDetail.resultData)">
+              <el-table :data="selectedChatDetail.resultData" style="width: 100%" border>
+                <el-table-column 
+                  v-for="(_, key) in selectedChatDetail.resultData[0]" 
+                  :key="key" 
+                  :prop="key" 
+                  :label="key"
+                />
+              </el-table>
+            </div>
+            
+            <!-- 分析结果 -->
+            <div v-else-if="selectedChatDetail.resultType === 'analysis'">
+              <div v-if="selectedChatDetail.rawData" class="analysis-data">
+                <!-- 相关性分析结果 -->
+                <div v-if="selectedChatDetail.rawData.correlation_matrix" class="correlation-result">
+                  <h4>相关性矩阵</h4>
+                  <el-table :data="selectedChatDetail.rawData.correlation_matrix" border>
+                    <el-table-column prop="column" label="列名" width="120" />
+                    <el-table-column v-for="col in selectedChatDetail.correlationColumns" :key="col" :prop="col" :label="col" />
+                  </el-table>
+                  <div v-if="selectedChatDetail.rawData.charts && selectedChatDetail.rawData.charts.correlation_matrix" class="chart-container">
+                    <img :src="selectedChatDetail.rawData.charts.correlation_matrix" alt="相关性矩阵热力图" style="width: 100%;" />
+                  </div>
+                </div>
+                
+                <!-- 描述性统计分析结果 -->
+                <div v-if="selectedChatDetail.rawData.stats" class="descriptive-result">
+                  <h4>描述性统计结果</h4>
+                  <div v-for="(stats, column) in selectedChatDetail.rawData.stats" :key="column">
+                    <h5>{{ column }}</h5>
+                    <el-table :data="[stats]" border>
+                      <el-table-column v-for="(_, key) in stats" :key="key" :prop="key" :label="key" />
+                    </el-table>
+                    <div v-if="selectedChatDetail.rawData.charts && selectedChatDetail.rawData.charts[column]" class="chart-container">
+                      <img :src="selectedChatDetail.rawData.charts[column]" :alt="`${column}统计图表`" style="width: 100%;" />
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 聚类分析结果 -->
+                <div v-if="selectedChatDetail.rawData.clusters" class="clusters-result">
+                  <h4>聚类分析结果</h4>
+                  <div v-if="selectedChatDetail.rawData.clusters.centers">
+                    <h5>聚类中心</h5>
+                    <el-table :data="selectedChatDetail.rawData.clusters.centers" border>
+                      <el-table-column v-for="key in Object.keys(selectedChatDetail.rawData.clusters.centers[0] || {})" :key="key" :prop="key" :label="key" />
+                    </el-table>
+                  </div>
+                  <div v-if="selectedChatDetail.rawData.clusters.counts">
+                    <h5>聚类计数</h5>
+                    <el-table :data="selectedChatDetail.rawData.clusters.counts" border>
+                      <el-table-column prop="cluster" label="簇" />
+                      <el-table-column prop="count" label="数量" />
+                      <el-table-column prop="percentage" label="占比" />
+                    </el-table>
+                  </div>
+                  <div v-if="selectedChatDetail.rawData.charts && selectedChatDetail.rawData.charts.cluster_plot">
+                    <img :src="selectedChatDetail.rawData.charts.cluster_plot" alt="聚类分布图" style="width: 100%;" />
+                  </div>
+                </div>
+                
+                <!-- 回归分析结果 -->
+                <div v-if="selectedChatDetail.rawData.regression" class="regression-result">
+                  <h4>回归分析结果</h4>
+                  <p>均方误差: {{ selectedChatDetail.rawData.regression.mse }}</p>
+                  <p>R²分数: {{ selectedChatDetail.rawData.regression.r2_score }}</p>
+                  <div v-if="selectedChatDetail.rawData.regression.coefficients">
+                    <h5>回归系数</h5>
+                    <el-table :data="selectedChatDetail.rawData.regression.coefficients" border>
+                      <el-table-column prop="feature" label="特征" />
+                      <el-table-column prop="coefficient" label="系数" />
+                    </el-table>
+                  </div>
+                  <div v-if="selectedChatDetail.rawData.charts && selectedChatDetail.rawData.charts.regression_plot">
+                    <img :src="selectedChatDetail.rawData.charts.regression_plot" alt="回归拟合图" style="width: 100%;" />
+                  </div>
+                </div>
+                
+                <!-- 异常检测结果 -->
+                <div v-if="selectedChatDetail.rawData.anomalies" class="anomaly-result">
+                  <h4>异常检测结果</h4>
+                  <div v-for="(anomaly, colName) in selectedChatDetail.rawData.anomalies" :key="colName">
+                    <h5>{{ colName }}</h5>
+                    <p>异常值数量: {{ anomaly.outlier_count }}</p>
+                    <p>正常范围: {{ anomaly.lower_bound }} - {{ anomaly.upper_bound }}</p>
+                  </div>
+                  <div v-if="selectedChatDetail.rawData.charts && selectedChatDetail.rawData.charts.anomaly_plot">
+                    <img :src="selectedChatDetail.rawData.charts.anomaly_plot" alt="异常检测图" style="width: 100%;" />
+                  </div>
+                </div>
+                
+                <!-- 分布分析结果 -->
+                <div v-if="selectedChatDetail.rawData.distributions" class="distribution-result">
+                  <h4>分布分析结果</h4>
+                  <div v-for="(dist, column) in selectedChatDetail.rawData.distributions" :key="column">
+                    <h5>{{ column }}</h5>
+                    <div v-if="dist.quantiles">
+                      <h6>分位数</h6>
+                      <el-table :data="[dist.quantiles]" border>
+                        <el-table-column v-for="(_, key) in dist.quantiles" :key="key" :prop="key" :label="`${key}分位数`" />
+                      </el-table>
+                    </div>
+                    <div v-if="selectedChatDetail.rawData.charts && selectedChatDetail.rawData.charts[column]">
+                      <img :src="selectedChatDetail.rawData.charts[column]" :alt="`${column}分布图`" style="width: 100%;" />
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 趋势分析结果 -->
+                <div v-if="selectedChatDetail.rawData.trends" class="trend-result">
+                  <h4>趋势分析结果</h4>
+                  <div v-if="selectedChatDetail.rawData.charts && selectedChatDetail.rawData.charts.trend_plot">
+                    <img :src="selectedChatDetail.rawData.charts.trend_plot" alt="趋势图" style="width: 100%;" />
+                  </div>
+                </div>
+                
+                <!-- 时间序列分析结果 -->
+                <div v-if="selectedChatDetail.rawData.time_series" class="timeseries-result">
+                  <h4>时间序列分析结果</h4>
+                  <p>均值: {{ selectedChatDetail.rawData.time_series.mean }}</p>
+                  <p>标准差: {{ selectedChatDetail.rawData.time_series.std }}</p>
+                  <div v-if="selectedChatDetail.rawData.charts && selectedChatDetail.rawData.charts.time_series_plot">
+                    <img :src="selectedChatDetail.rawData.charts.time_series_plot" alt="时间序列图" style="width: 100%;" />
+                  </div>
+                </div>
+              </div>
+              
+              <!-- 分析报告 -->
+              <div v-if="selectedChatDetail.resultData.content" class="analysis-content">
+                <h4>分析报告</h4>
+                <div class="markdown-content" v-html="renderMarkdown(selectedChatDetail.resultData.content)"></div>
+              </div>
+            </div>
+            
+            <!-- 文本结果 -->
+            <div v-else-if="selectedChatDetail.resultData && selectedChatDetail.resultData.content" class="text-content">
+              <pre>{{ selectedChatDetail.resultData.content }}</pre>
+            </div>
+            
+            <!-- 空结果 -->
+            <div v-else class="empty-content">
+              <div class="no-result-text">没有结果数据</div>
+            </div>
           </div>
         </div>
       </el-dialog>
@@ -443,9 +587,87 @@ const handleChatSelectionChange = (val: any[]) => {
 };
 
 // 查看会话详情
-const viewChatDetail = (record: any) => {
-  selectedChatDetail.value = record;
-  showChatDetailDialog.value = true;
+const viewChatDetail = async (record: any) => {
+  try {
+    // 获取完整的会话详情
+    const chatInfo = await chatApi.get(record.chat_id);
+    if (chatInfo && chatInfo.records) {
+      const fullRecord = chatInfo.records.find((r: any) => r.id === record.id);
+      if (fullRecord) {
+        let resultData: any = {};
+        let resultType = 'text';
+        let rawData: any = {};
+        let charts: any = {};
+        let correlationColumns: any[] = [];
+        
+        if (record.tool === 'analysis') {
+          // 数据分析
+          if (fullRecord.data && typeof fullRecord.data === 'object') {
+            if (fullRecord.data.charts && typeof fullRecord.data.charts === 'object') {
+              charts = fullRecord.data.charts;
+            }
+            rawData = fullRecord.data;
+            if (fullRecord.data.correlation_matrix && Array.isArray(fullRecord.data.correlation_matrix) && fullRecord.data.correlation_matrix.length > 0) {
+              correlationColumns = Object.keys(fullRecord.data.correlation_matrix[0]);
+            }
+          }
+          
+          if (fullRecord.analysis) {
+            if (typeof fullRecord.analysis === 'string') {
+              try {
+                const analysisObj = JSON.parse(fullRecord.analysis);
+                resultData = { content: analysisObj.content || analysisObj.report || '' };
+              } catch (e) {
+                resultData = { content: fullRecord.analysis };
+              }
+            } else if (typeof fullRecord.analysis === 'object' && fullRecord.analysis.content) {
+              resultData = { content: fullRecord.analysis.content };
+            }
+            resultType = 'analysis';
+          }
+        } else {
+          // 智能问数
+          if (fullRecord.data) {
+            const dataObj = typeof fullRecord.data === 'string' ? JSON.parse(fullRecord.data) : fullRecord.data;
+            if (typeof dataObj === 'object' && Array.isArray(dataObj.data)) {
+              resultData = dataObj.data;
+              resultType = 'table';
+            } else if (Array.isArray(dataObj)) {
+              resultData = dataObj;
+              resultType = 'table';
+            } else {
+              resultData = { content: JSON.stringify(dataObj, null, 2) };
+              resultType = 'text';
+            }
+          } else if (fullRecord.sql_answer) {
+            resultData = { content: fullRecord.sql_answer };
+            resultType = 'text';
+          } else if (fullRecord.chart_answer) {
+            resultData = { content: fullRecord.chart_answer };
+            resultType = 'text';
+          }
+        }
+        
+        selectedChatDetail.value = {
+          ...record,
+          resultData: resultData,
+          resultType: resultType,
+          rawData: rawData,
+          charts: charts,
+          correlationColumns: correlationColumns
+        };
+      } else {
+        selectedChatDetail.value = record;
+      }
+    } else {
+      selectedChatDetail.value = record;
+    }
+    showChatDetailDialog.value = true;
+  } catch (error) {
+    console.error('获取会话详情失败:', error);
+    selectedChatDetail.value = record;
+    showChatDetailDialog.value = true;
+  }
 };
 
 // 删除会话记录
@@ -744,6 +966,92 @@ onMounted(async () => {
 
 .result-failed {
   color: #f56c6c;
+}
+
+/* 分析结果样式 */
+.analysis-data {
+  margin-bottom: 20px;
+}
+
+.chart-container {
+  margin-top: 12px;
+  margin-bottom: 20px;
+}
+
+.correlation-result,
+.descriptive-result,
+.clusters-result,
+.regression-result,
+.anomaly-result,
+.distribution-result,
+.trend-result,
+.timeseries-result {
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  
+  h4 {
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #303133;
+  }
+  
+  h5 {
+    margin-bottom: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #606266;
+  }
+  
+  h6 {
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #909399;
+  }
+  
+  p {
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #606266;
+  }
+}
+
+.analysis-content {
+  margin-top: 20px;
+  padding: 16px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  
+  h4 {
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #303133;
+  }
+}
+
+.text-content {
+  pre {
+    background-color: #f5f7fa;
+    padding: 12px;
+    border-radius: 4px;
+    overflow-x: auto;
+    line-height: 1.4;
+    font-size: 13px;
+  }
+}
+
+.empty-content {
+  text-align: center;
+  padding: 40px 0;
+  
+  .no-result-text {
+    font-size: 14px;
+    color: #909399;
+  }
 }
 
 /* Markdown样式 */
