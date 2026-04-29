@@ -124,15 +124,25 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="120">
+            <el-table-column label="操作" width="180">
               <template #default="scope">
-                <el-button 
-                  size="small" 
-                  type="primary" 
-                  @click="viewChatDetail(scope.row)"
-                >
-                  查看详情
-                </el-button>
+                <div class="table-operate">
+                  <el-button 
+                    size="small" 
+                    type="success" 
+                    @click="viewChatDetail(scope.row)"
+                    style="margin-right: 8px;"
+                  >
+                    查看
+                  </el-button>
+                  <el-button 
+                    size="small" 
+                    type="danger" 
+                    @click="deleteChatRecord(scope.row)"
+                  >
+                    删除
+                  </el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -438,6 +448,28 @@ const viewChatDetail = (record: any) => {
   showChatDetailDialog.value = true;
 };
 
+// 删除会话记录
+const deleteChatRecord = (record: any) => {
+  ElMessage.confirm('确定要删除这条会话记录吗？', '删除确认', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    try {
+      // 从列表中移除
+      chatRecords.value = chatRecords.value.filter(r => r.id !== record.id);
+      // 从选中列表中移除
+      selectedChatRecords.value = selectedChatRecords.value.filter(id => id !== record.id);
+      ElMessage.success('删除成功');
+    } catch (error) {
+      ElMessage.error('删除失败');
+      console.error('删除会话记录错误:', error);
+    }
+  }).catch(() => {
+    // 用户取消删除
+  });
+};
+
 // 从会话生成报告
 const generateReportFromChats = async () => {
   if (selectedChatRecords.value.length === 0) {
@@ -670,6 +702,18 @@ onMounted(async () => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+/* 表格操作列 */
+.table-operate {
+  display: flex;
+  align-items: center;
+  
+  .el-button {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+  }
 }
 
 /* 会话详情对话框 */
