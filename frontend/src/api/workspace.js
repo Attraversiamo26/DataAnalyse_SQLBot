@@ -1,0 +1,12 @@
+import { request } from '@/utils/request';
+export const workspaceUserList = (params, pageNum, pageSize) => request.get(`/system/workspace/uws/pager/${pageNum}/${pageSize}`, { params });
+export const workspaceOptionUserList = (params, pageNum, pageSize) => request.get(`/system/workspace/uws/option/pager/${pageNum}/${pageSize}`, { params });
+export const workspaceUwsCreate = (data) => request.post('/system/workspace/uws', data);
+export const workspaceUwsUpdate = (data) => request.put('/system/workspace/uws', data);
+export const workspaceCreate = (data) => request.post('/system/workspace', data);
+export const workspaceUpdate = (data) => request.put('/system/workspace', data);
+export const workspaceUwsDelete = (data) => request.delete('/system/workspace/uws', { data });
+export const workspaceDelete = (id) => request.delete(`/system/workspace/${id}`);
+export const workspaceList = () => request.get('/system/workspace');
+export const workspaceDetail = (id) => request.get(`/system/workspace/${id}`);
+export const uwsOption = (params) => request.get('system/workspace/uws/option', { params });

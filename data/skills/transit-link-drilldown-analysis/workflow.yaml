@@ -1,0 +1,43 @@
+id: transit-link
+name: 线路中转环节时限对标下钻分析
+description: 读取线路时限数据，对比邮政及竞品，针对中转环节输出分析结论及优化建议
+data_file: "../data/寄递时限对标分析指标大全.xlsx"
+env_requirements:
+  - "node >= 14"
+  - "npm install xlsx"
+  - "python >= 3.8"
+  - "pip install pandas python-docx docx2pdf openpyxl"
+
+steps:
+  - id: step_1_read_data
+    name: 读取中转环节数据
+    description: 从线路表Sheet中读取指定线路的中转环节数据
+    script: "analyze.js"
+    language: nodejs
+    args_template:
+      - "${params.route_name}"
+    timeout: 60
+    outputs:
+      - name: route_data
+        type: object
+        value: "${step_1_read_data.output.route_data}"
+      - name: transit_gap
+        type: string
+        value: "${step_1_read_data.output.transit_gap}"
+
+  - id: step_2_deep_analysis
+    name: 中转环节深度分析
+    description: 对中转环节进行详细分析，生成Word/PDF报告
+    script: "scripts/analyze_transit.py"
+    language: python
+    args_template: []
+    depends_on: ["step_1_read_data"]
+    timeout: 120
+    optional: true
+    outputs:
+      - name: analysis_report
+        type: file
+        value: "scripts/线路中转环节时限分析报告_*.docx"
+      - name: pdf_report
+        type: file
+        value: "scripts/线路中转环节时限分析报告_*.pdf"

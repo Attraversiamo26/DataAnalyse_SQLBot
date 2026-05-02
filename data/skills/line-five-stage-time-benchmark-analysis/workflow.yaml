@@ -1,0 +1,40 @@
+id: line-five-stage
+name: 线路五环节时限对标分析
+description: 读取线路表数据，自动更新PPT模板生成对标分析结果
+data_file: "../data/寄递时限对标分析指标大全.xlsx"
+env_requirements:
+  - "node >= 14"
+  - "npm install xlsx jszip pdfkit"
+
+steps:
+  - id: step_1_validate_data
+    name: 验证数据文件
+    description: 检查Excel数据文件和PPT模板是否存在
+    script: "check_sheets.js"
+    language: nodejs
+    args_template: []
+    timeout: 30
+    optional: true
+
+  - id: step_2_read_route
+    name: 读取线路数据
+    description: 从线路表Sheet中读取指定线路的五环节时限数据
+    script: "analyze.js"
+    language: nodejs
+    args_template:
+      - "${params.route_name}"
+    depends_on: ["step_1_validate_data"]
+    timeout: 60
+    outputs:
+      - name: ppt_report
+        type: file
+        value: "输出结果/线路五环节时限对标分析结果_${params.route_name}.pptx"
+      - name: pdf_summary
+        type: file
+        value: "输出结果/线路五环节时限对标分析结果摘要_${params.route_name}.pdf"
+      - name: key_problem_stage
+        type: string
+        value: "${step_2_read_route.output.key_problem_stage}"
+      - name: metrics
+        type: object
+        value: "${step_2_read_route.output.metrics}"

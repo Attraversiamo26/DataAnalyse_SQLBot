@@ -1,0 +1,9 @@
+- [x] Checkpoint 1: 后端API路由注册完成
+- [x] Checkpoint 2: 前端路由配置完成
+- [x] Checkpoint 3: 前端菜单配置完成
+- [x] Checkpoint 4: 技能管理API接口文件创建完成
+- [x] Checkpoint 5: 技能管理前端页面创建完成
+- [x] Checkpoint 6: 报告生成API连接调整完成
+- [x] Checkpoint 7: 技能管理API端点测试通过
+- [ ] Checkpoint 8: 技能管理页面功能测试通过
+- [ ] Checkpoint 9: 报告生成功能测试通过

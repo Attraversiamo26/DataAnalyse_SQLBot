@@ -1,0 +1,28 @@
+id: pickup-stage
+name: 收寄环节下钻分析
+description: 分析指定线路的收寄环节下钻数据，找出收寄时间最长的N个机构
+data_file: "../data/寄递时限对标分析指标大全.xlsx"
+env_requirements:
+  - "node >= 14"
+  - "npm install xlsx"
+
+steps:
+  - id: step_1_read_data
+    name: 读取收寄机构数据
+    description: 从收寄机构表Sheet中读取指定线路的收寄机构数据
+    script: "analyze.js"
+    language: nodejs
+    args_template:
+      - "${params.route_name}"
+      - "${params.top_n}"
+    timeout: 60
+    outputs:
+      - name: slow_institutions
+        type: array
+        value: "${step_1_read_data.output.slow_institutions}"
+      - name: slowest_institution
+        type: string
+        value: "${step_1_read_data.output.slowest_institution}"
+      - name: problem_analysis
+        type: object
+        value: "${step_1_read_data.output.problem_analysis}"

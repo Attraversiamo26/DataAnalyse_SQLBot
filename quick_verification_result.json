@@ -1,0 +1,130 @@
+{
+  "total_skills": 8,
+  "skills_by_layer": {
+    "overview": 1,
+    "stage": 5,
+    "institution": 2
+  },
+  "has_8_skills": true,
+  "all_layers_ok": true,
+  "existing_output_formats": [
+    ".docx",
+    ".pdf",
+    ".png",
+    ".pptx"
+  ],
+  "skills": [
+    {
+      "skill_id": "export-institution-drilldown-analysis",
+      "name": "export-institution-drilldown-analysis",
+      "layer": "institution",
+      "language": "nodejs",
+      "has_scripts": true,
+      "has_workflow": true,
+      "num_trigger_patterns": 6,
+      "num_input_params": 2,
+      "num_steps": 1,
+      "num_output_formats": 4,
+      "num_outputs": 4,
+      "num_chain_triggers": 0
+    },
+    {
+      "skill_id": "transit-link-drilldown-analysis",
+      "name": "线路中转环节时限对标下钻分析",
+      "layer": "stage",
+      "language": "nodejs",
+      "has_scripts": true,
+      "has_workflow": true,
+      "num_trigger_patterns": 3,
+      "num_input_params": 3,
+      "num_steps": 2,
+      "num_output_formats": 11,
+      "num_outputs": 0,
+      "num_chain_triggers": 0
+    },
+    {
+      "skill_id": "pickup-institution-drilldown-analysis",
+      "name": "pickup-institution-drilldown-analysis",
+      "layer": "institution",
+      "language": "nodejs",
+      "has_scripts": true,
+      "has_workflow": true,
+      "num_trigger_patterns": 7,
+      "num_input_params": 2,
+      "num_steps": 1,
+      "num_output_formats": 4,
+      "num_outputs": 4,
+      "num_chain_triggers": 0
+    },
+    {
+      "skill_id": "pickup-stage-drilldown-analysis",
+      "name": "pickup-stage-drilldown-analysis",
+      "layer": "stage",
+      "language": "nodejs",
+      "has_scripts": true,
+      "has_workflow": true,
+      "num_trigger_patterns": 6,
+      "num_input_params": 2,
+      "num_steps": 1,
+      "num_output_formats": 1,
+      "num_outputs": 3,
+      "num_chain_triggers": 1
+    },
+    {
+      "skill_id": "export-link-drilldown-analysis",
+      "name": "export-link-drilldown-analysis",
+      "layer": "stage",
+      "language": "nodejs",
+      "has_scripts": true,
+      "has_workflow": true,
+      "num_trigger_patterns": 5,
+      "num_input_params": 3,
+      "num_steps": 1,
+      "num_output_formats": 1,
+      "num_outputs": 3,
+      "num_chain_triggers": 1
+    },
+    {
+      "skill_id": "line-five-stage-time-benchmark-analysis",
+      "name": "line-five-stage-time-benchmark-analysis",
+      "layer": "overview",
+      "language": "nodejs",
+      "has_scripts": true,
+      "has_workflow": true,
+      "num_trigger_patterns": 4,
+      "num_input_params": 2,
+      "num_steps": 2,
+      "num_output_formats": 9,
+      "num_outputs": 4,
+      "num_chain_triggers": 1
+    },
+    {
+      "skill_id": "import-link-drilldown-analysis",
+      "name": "线路进口环节时限对标下钻分析",
+      "layer": "stage",
+      "language": "nodejs",
+      "has_scripts": true,
+      "has_workflow": true,
+      "num_trigger_patterns": 3,
+      "num_input_params": 3,
+      "num_steps": 2,
+      "num_output_formats": 11,
+      "num_outputs": 0,
+      "num_chain_triggers": 0
+    },
+    {
+      "skill_id": "delivery-stage-drilldown-analysis",
+      "name": "线路投递环节时限对标下钻分析",
+      "layer": "stage",
+      "language": "python",
+      "has_scripts": true,
+      "has_workflow": true,
+      "num_trigger_patterns": 3,
+      "num_input_params": 3,
+      "num_steps": 3,
+      "num_output_formats": 5,
+      "num_outputs": 0,
+      "num_chain_triggers": 0
+    }
+  ]
+}

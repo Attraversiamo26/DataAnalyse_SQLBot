@@ -1,0 +1,43 @@
+id: import-link
+name: 线路进口环节时限对标下钻分析
+description: 读取线路时限数据，对比邮政及竞品，针对进口环节输出分析结论及优化建议
+data_file: "../data/寄递时限对标分析指标大全.xlsx"
+env_requirements:
+  - "node >= 14"
+  - "npm install xlsx"
+  - "python >= 3.8"
+  - "pip install pandas python-docx docx2pdf matplotlib numpy openpyxl"
+
+steps:
+  - id: step_1_read_data
+    name: 读取进口环节数据
+    description: 从线路表和进口机构表Sheet中读取指定线路数据
+    script: "analyze.js"
+    language: nodejs
+    args_template:
+      - "${params.route_name}"
+    timeout: 60
+    outputs:
+      - name: route_data
+        type: object
+        value: "${step_1_read_data.output.route_data}"
+      - name: import_gap
+        type: string
+        value: "${step_1_read_data.output.import_gap}"
+
+  - id: step_2_deep_analysis
+    name: 进口机构深度分析
+    description: 对进口处理时间最长的机构进行48小时分布分析
+    script: "scripts/analyze_binzhou_huizhou.py"
+    language: python
+    args_template: []
+    depends_on: ["step_1_read_data"]
+    timeout: 120
+    optional: true
+    outputs:
+      - name: analysis_report
+        type: file
+        value: "scripts/线路进口环节时限分析报告_*.docx"
+      - name: pdf_report
+        type: file
+        value: "scripts/线路进口环节时限分析报告_*.pdf"

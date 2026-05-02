@@ -1,0 +1,31 @@
+id: pickup-institution
+name: 收寄机构下钻分析
+description: 分析指定收寄机构的48小时收寄和离开时间分布数据，生成分析总结PDF
+data_file: "../data/寄递时限对标分析指标大全.xlsx"
+env_requirements:
+  - "node >= 14"
+  - "npm install xlsx pdfkit"
+
+steps:
+  - id: step_1_read_data
+    name: 读取48小时数据
+    description: 从收寄机构48小时Sheet中读取指定机构数据
+    script: "analyze.js"
+    language: nodejs
+    args_template:
+      - "${params.institution_name}"
+      - "${params.route_name}"
+    timeout: 60
+    outputs:
+      - name: pdf_report
+        type: file
+        value: "输出结果/收寄机构下钻分析结果_${params.institution_name}.pdf"
+      - name: pickup_peaks
+        type: array
+        value: "${step_1_read_data.output.pickup_peaks}"
+      - name: leave_peaks
+        type: array
+        value: "${step_1_read_data.output.leave_peaks}"
+      - name: gap_analysis
+        type: object
+        value: "${step_1_read_data.output.gap_analysis}"

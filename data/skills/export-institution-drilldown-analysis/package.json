@@ -1,0 +1,13 @@
+{
+  "name": "export-institution-drilldown-analysis",
+  "version": "1.0.0",
+  "description": "出口机构下钻分析 Skill",
+  "main": "analyze.js",
+  "scripts": {
+    "analyze": "node analyze.js"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5",
+    "pdfkit": "^0.13.0"
+  }
+}

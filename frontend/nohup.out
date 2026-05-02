@@ -1,0 +1,50 @@
+
+> SQLBot@0.0.0 dev
+> vite
+
+development
+{
+  VITE_API_BASE_URL: 'http://localhost:8002/api/v1',
+  VITE_APP_TITLE: '智能数据分析助手 (Development)'
+}
+Port 8502 is in use, trying another one...
+
+  VITE v6.4.2  ready in 803 ms
+
+  ➜  Local:   http://localhost:8503/
+  ➜  Network: use --host to expose
+[1m[33m[@vue/compiler-sfc][0m[33m `withDefaults` is a compiler macro and no longer needs to be imported.[0m
+
+[1m[33m[@vue/compiler-sfc][0m[33m `defineProps` is a compiler macro and no longer needs to be imported.[0m
+
+[1m[33m[@vue/compiler-sfc][0m[33m `defineEmits` is a compiler macro and no longer needs to be imported.[0m
+
+15:46:44 [vite] (client) hmr update /src/views/analysis/index.vue?vue&type=style&index=0&scoped=f79ac014&lang.css
+15:47:06 [vite] (client) hmr update /src/views/analysis/AnalysisChatList.vue?vue&type=style&index=0&scoped=c4309aa9&lang.less
+15:49:07 [vite] (client) hmr update /src/views/analysis/index.vue
+15:49:31 [vite] (client) hmr update /src/views/analysis/index.vue?vue&type=style&index=0&scoped=f79ac014&lang.css
+15:49:46 [vite] (client) hmr update /src/views/analysis/AnalysisChatList.vue?vue&type=style&index=0&scoped=c4309aa9&lang.less
+15:56:21 [vite] (client) hmr update /src/views/analysis/index.vue
+15:56:40 [vite] (client) hmr update /src/views/analysis/index.vue
+15:57:36 [vite] (client) hmr update /src/views/analysis/index.vue
+16:02:51 [vite] (client) hmr update /src/views/analysis/index.vue
+16:03:20 [vite] (client) hmr update /src/views/analysis/index.vue
+20:47:19 [vite] (client) hmr update /src/views/chat/history/Index.vue
+20:53:57 [vite] (client) hmr update /src/views/chat/history/Index.vue
+20:54:12 [vite] (client) hmr update /src/views/chat/history/Index.vue
+20:54:57 [vite] (client) hmr update /src/views/chat/history/Index.vue?vue&type=style&index=0&scoped=274576fb&lang.less
+21:23:03 [vite] (client) hmr update /src/views/analysis/index.vue
+21:41:26 [vite] (client) hmr update /src/views/analysis/index.vue
+22:34:06 [vite] (client) hmr update /src/views/chat/history/Index.vue
+22:34:29 [vite] (client) hmr update /src/views/chat/history/Index.vue
+22:38:28 [vite] (client) hmr update /src/views/chat/history/Index.vue
+22:40:15 [vite] (client) hmr update /src/views/chat/history/Index.vue
+22:50:25 [vite] (client) hmr update /src/views/chat/history/Index.vue
+22:50:43 [vite] (client) hmr update /src/views/chat/history/Index.vue
+22:51:22 [vite] .env.development changed, restarting server...
+development
+{
+  VITE_API_BASE_URL: 'http://localhost:8000/api/v1',
+  VITE_APP_TITLE: '智能数据分析助手 (Development)'
+}
+22:51:22 [vite] server restarted.

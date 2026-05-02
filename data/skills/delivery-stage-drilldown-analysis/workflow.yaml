@@ -1,0 +1,54 @@
+id: delivery-stage
+name: 线路投递环节时限对标下钻分析
+description: 读取线路时限数据，对比邮政及竞品，针对投递环节输出分析结论及优化建议
+data_file: "../data/寄递时限对标分析指标大全.xlsx"
+env_requirements:
+  - "python >= 3.8"
+  - "pip install pandas python-docx docx2pdf matplotlib numpy openpyxl"
+
+steps:
+  - id: step_1_read_data
+    name: 读取投递环节数据
+    description: 从线路表、投递机构表Sheet中读取指定线路数据
+    script: "scripts/analyze_binzhou_huizhou.py"
+    language: python
+    args_template: []
+    timeout: 120
+    outputs:
+      - name: route_data
+        type: object
+        value: "${step_1_read_data.output.route_data}"
+      - name: delivery_gap
+        type: string
+        value: "${step_1_read_data.output.delivery_gap}"
+
+  - id: step_2_chart_48h
+    name: 48小时分布图
+    description: 生成问题机构的48小时到达/下段/投递分布图
+    script: "scripts/chart_48h.py"
+    language: python
+    args_template: []
+    depends_on: ["step_1_read_data"]
+    timeout: 60
+    optional: true
+    outputs:
+      - name: chart_image
+        type: file
+        value: "scripts/*48h*.png"
+
+  - id: step_3_analysis_report
+    name: 生成分析报告
+    description: 生成Word/PDF格式的投递环节分析报告
+    script: "scripts/analyze_binzhou_jincheng.py"
+    language: python
+    args_template: []
+    depends_on: ["step_1_read_data", "step_2_chart_48h"]
+    timeout: 120
+    optional: true
+    outputs:
+      - name: analysis_report
+        type: file
+        value: "scripts/线路投递环节时限分析报告_*.docx"
+      - name: pdf_report
+        type: file
+        value: "scripts/线路投递环节时限分析报告_*.pdf"

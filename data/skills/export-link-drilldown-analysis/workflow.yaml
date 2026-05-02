@@ -1,0 +1,31 @@
+id: export-link
+name: 出口环节下钻分析
+description: 分析出口环节中机构的时限表现，识别慢机构，生成分析PDF
+data_file: "../data/寄递时限对标分析指标大全.xlsx"
+env_requirements:
+  - "node >= 14"
+  - "npm install xlsx pdfkit"
+
+steps:
+  - id: step_1_read_data
+    name: 读取出口机构数据
+    description: 从出口机构表Sheet中读取指定线路的出口机构数据
+    script: "analyze.js"
+    language: nodejs
+    args_template:
+      - "${params.route_name}"
+      - "${params.top_n}"
+    timeout: 60
+    outputs:
+      - name: pdf_report
+        type: file
+        value: "输出结果/出口环节下钻分析结果_${params.route_name}.pdf"
+      - name: slow_institutions
+        type: array
+        value: "${step_1_read_data.output.slow_institutions}"
+      - name: slowest_institution
+        type: string
+        value: "${step_1_read_data.output.slowest_institution}"
+      - name: problem_analysis
+        type: object
+        value: "${step_1_read_data.output.problem_analysis}"
