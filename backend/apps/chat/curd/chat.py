@@ -40,10 +40,15 @@ def get_chat(session: SessionDep, chat_id: int) -> Chat:
     return chat
 
 
-def list_chats(session: SessionDep, current_user: CurrentUser) -> List[Chat]:
+def list_chats(session: SessionDep, current_user: CurrentUser, chat_type: Optional[str] = None) -> List[Chat]:
     oid = current_user.oid if current_user.oid is not None else 1
-    chart_list = session.query(Chat).filter(and_(Chat.create_by == current_user.id, Chat.oid == oid)).order_by(
-        Chat.create_time.desc()).all()
+    query = session.query(Chat).filter(and_(Chat.create_by == current_user.id, Chat.oid == oid))
+    
+    # 如果指定了chat_type，则按类型过滤
+    if chat_type:
+        query = query.filter(Chat.chat_type == chat_type)
+    
+    chart_list = query.order_by(Chat.create_time.desc()).all()
     return chart_list
 
 

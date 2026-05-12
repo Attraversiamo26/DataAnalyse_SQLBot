@@ -130,11 +130,15 @@ class LLMService:
                 if not ds:
                     raise SingleMessageError("No available datasource configuration found")
                 chat_question.engine = ds.type + get_version(ds)
+                self.ds = ds  # 设置 self.ds
             else:
                 ds = session.get(CoreDatasource, chat.datasource)
                 if not ds:
                     raise SingleMessageError("No available datasource configuration found")
                 chat_question.engine = (ds.type_name if ds.type != 'excel' else 'PostgreSQL') + get_version(ds)
+                self.ds = CoreDatasource(**ds.model_dump())  # 设置 self.ds
+        else:
+            self.ds = None  # 初始化 self.ds 为 None
 
         self.generate_sql_logs = list_generate_sql_logs(session=session, chart_id=chat_id)
         self.generate_chart_logs = list_generate_chart_logs(session=session, chart_id=chat_id)
@@ -585,6 +589,25 @@ class LLMService:
         try:
             data: dict = _ds_list[0] if ignore_auto_select else ds
 
+            # 添加类型检查，确保data是字典
+            if not isinstance(data, dict):
+                # 如果data不是字典，尝试解析
+                if isinstance(data, str):
+                    try:
+                        data = orjson.loads(data)
+                    except:
+                        # 如果解析失败，使用第一个数据源
+                        if _ds_list:
+                            data = _ds_list[0]
+                        else:
+                            raise SingleMessageError('Invalid datasource selection format')
+                else:
+                    # 其他类型，使用第一个数据源
+                    if _ds_list:
+                        data = _ds_list[0]
+                    else:
+                        raise SingleMessageError('Invalid datasource selection format')
+
             if data.get('id') and data.get('id') != 0:
                 _datasource = data['id']
                 _chat = _session.get(Chat, self.record.chat_id)
@@ -1007,9 +1030,25 @@ class LLMService:
                     data_obj['limit'] = limit
                 else:
                     data_obj['data'] = data_result
+            
+            # 安全地设置 datasource 字段
+            if self.ds and hasattr(self.ds, 'id'):
                 data_obj['datasource'] = self.ds.id
+            else:
+                data_obj['datasource'] = None
             
             # 序列化数据并检查大小
+            # 首先确保 data_obj 中的所有值都是 JSON 可序列化的
+            for key, value in data_obj.items():
+                if isinstance(value, (int, float, str, bool, list, dict, type(None))):
+                    continue
+                else:
+                    # 如果值不是基本类型，尝试转换为字符串
+                    try:
+                        data_obj[key] = str(value)
+                    except:
+                        data_obj[key] = "Unserializable object"
+            
             serialized_data = orjson.dumps(data_obj).decode()
             if len(serialized_data) > max_data_size:
                 # 如果数据过大，进一步限制行数
@@ -1129,16 +1168,26 @@ class LLMService:
             if not self.ds:
                 ds_res = self.select_datasource(_session)
 
+                # 添加调试日志
+                SQLBotLogUtil.info(f"ds_res type: {type(ds_res)}")
+                
                 for chunk in ds_res:
+                    # 添加调试日志
+                    SQLBotLogUtil.info(f"chunk type: {type(chunk)}, chunk: {chunk}")
                     SQLBotLogUtil.info(chunk)
                     if in_chat:
                         yield 'data:' + orjson.dumps(
                             {'content': chunk.get('content'), 'reasoning_content': chunk.get('reasoning_content'),
                              'type': 'datasource-result'}).decode() + '\n\n'
                 if in_chat:
-                    yield 'data:' + orjson.dumps({'id': self.ds.id, 'datasource_name': self.ds.name,
-                                                  'engine_type': self.ds.type_name or self.ds.type,
-                                                  'type': 'datasource'}).decode() + '\n\n'
+                    # 将 CoreDatasource 对象转换为字典后再序列化
+                    ds_dict = {
+                        'id': self.ds.id,
+                        'datasource_name': self.ds.name if hasattr(self.ds, 'name') else str(self.ds),
+                        'engine_type': self.ds.type_name if hasattr(self.ds, 'type_name') else (self.ds.type if hasattr(self.ds, 'type') else 'unknown'),
+                        'type': 'datasource'
+                    }
+                    yield 'data:' + orjson.dumps(ds_dict).decode() + '\n\n'
 
             else:
                 self.validate_history_ds(_session)
@@ -1244,10 +1293,22 @@ class LLMService:
                                                                      operate=OperationEnum.EXECUTE_SQL,
                                                                      record_id=self.record.id, local_operation=True)
             result = self.execute_sql(sql=real_execute_sql)
+            
+            # 添加类型检查，确保result是字典
+            if not isinstance(result, dict):
+                # 如果result不是字典，尝试解析
+                if isinstance(result, str):
+                    try:
+                        result = orjson.loads(result)
+                    except:
+                        raise SQLBotDBError(f"SQL execution returned invalid format: {type(result).__name__}")
+                else:
+                    raise SQLBotDBError(f"SQL execution returned invalid format: {type(result).__name__}")
+            
             self.current_logs[OperationEnum.EXECUTE_SQL] = end_log(session=_session,
                                                                    log=self.current_logs[OperationEnum.EXECUTE_SQL],
                                                                    full_message={'sql': real_execute_sql,
-                                                                                 'count': len(result.get('data'))})
+                                                                                 'count': len(result.get('data', []))})
 
             _data = DataFormat.convert_large_numbers_in_object_array(result.get('data'))
             result["data"] = _data
@@ -1698,11 +1759,21 @@ def process_stream(res: Iterator[BaseMessageChunk],
     for chunk in res:
         SQLBotLogUtil.info(chunk)
         reasoning_content_chunk = ''
-        content = chunk.content
         output_content = ''  # 实际要输出的内容
+        
+        # 添加类型检查，确保chunk是BaseMessageChunk对象
+        if isinstance(chunk, str):
+            # 如果chunk是字符串，直接处理
+            content = chunk
+        elif hasattr(chunk, 'content'):
+            # 如果chunk是消息对象，获取content属性
+            content = chunk.content
+        else:
+            # 其他类型，尝试转换为字符串
+            content = str(chunk)
 
-        # 检查additional_kwargs中的reasoning_content
-        if 'reasoning_content' in chunk.additional_kwargs:
+        # 检查additional_kwargs中的reasoning_content（仅当chunk有此属性时）
+        if hasattr(chunk, 'additional_kwargs') and 'reasoning_content' in chunk.additional_kwargs:
             reasoning_content = chunk.additional_kwargs.get('reasoning_content', '')
             if reasoning_content is None:
                 reasoning_content = ''

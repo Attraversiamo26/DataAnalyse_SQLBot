@@ -5,7 +5,7 @@ from typing import Optional, List
 
 import orjson
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, select
 from starlette.responses import JSONResponse
@@ -30,9 +30,10 @@ router = APIRouter(tags=["Data Q&A"], prefix="/chat")
 
 
 @router.get("/list", response_model=List[ChatInfo], summary=f"{PLACEHOLDER_PREFIX}get_chat_list")
-async def chats(session: SessionDep, current_user: CurrentUser, current_assistant: CurrentAssistant):
+async def chats(session: SessionDep, current_user: CurrentUser, current_assistant: CurrentAssistant,
+                chat_type: Optional[str] = Query(None, description="会话类型过滤: chat(智能问数), analysis(数据分析), report(报告生成)，不传则显示所有")):
     def inner():
-        chat_list = list_chats(session, current_user)
+        chat_list = list_chats(session, current_user, chat_type=chat_type)
         result = []
         for chat in chat_list:
             try:
@@ -409,16 +410,30 @@ async def stream_sql(session: SessionDep, current_user: CurrentUser, request_que
         raw_data = {}
         for chunk in res:
             if chunk:
+                # 检查chunk的类型
+                if isinstance(chunk, str):
+                    # 如果是字符串，尝试解析为JSON
+                    try:
+                        chunk = orjson.loads(chunk)
+                    except:
+                        # 如果解析失败，创建一个错误响应
+                        chunk = {'success': False, 'content': chunk}
                 raw_data = chunk
+        
         status_code = 200
-        if not raw_data.get('success'):
+        # 检查raw_data是否是字典
+        if isinstance(raw_data, dict):
+            if not raw_data.get('success'):
+                status_code = 500
+        else:
+            # 如果不是字典，创建一个错误响应
+            raw_data = {'success': False, 'message': str(raw_data)}
             status_code = 500
 
         return JSONResponse(
             content=raw_data,
             status_code=status_code,
         )
-
 
 @router.post("/record/{chat_record_id}/{action_type}", summary=f"{PLACEHOLDER_PREFIX}analysis_or_predict")
 async def analysis_or_predict_question(session: SessionDep, current_user: CurrentUser,

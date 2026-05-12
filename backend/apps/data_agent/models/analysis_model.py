@@ -150,9 +150,9 @@ class Report(SQLModel, table=True):
     report_content: str = Field(sa_column=Column(Text, nullable=True))  # Markdown 格式的报告内容
     status: str = Field(max_length=50, default="generated")  # generated, edited, exported
     
-    # 关联的分析结果
-    analysis_result_ids: Optional[List[int]] = Field(sa_column=Column(ARRAY(Integer), nullable=True))
-    chat_record_ids: Optional[List[int]] = Field(sa_column=Column(ARRAY(Integer), nullable=True))
+    # 关联的分析结果（存储为JSON字符串）
+    analysis_result_ids: Optional[str] = Field(sa_column=Column(Text, nullable=True))
+    chat_record_ids: Optional[str] = Field(sa_column=Column(Text, nullable=True))
     
 
 class ReportBase(BaseModel):

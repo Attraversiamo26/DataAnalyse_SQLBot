@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import List, Optional
 
@@ -12,8 +13,18 @@ class ReportCRUD:
     @staticmethod
     def create(db: Session, report: ReportCreate, user_id: int) -> Report:
         """创建报告"""
+        data = report.model_dump()
+        
+        # 将列表转换为JSON字符串
+        if data.get('analysis_result_ids'):
+            if isinstance(data['analysis_result_ids'], list):
+                data['analysis_result_ids'] = json.dumps(data['analysis_result_ids'])
+        if data.get('chat_record_ids'):
+            if isinstance(data['chat_record_ids'], list):
+                data['chat_record_ids'] = json.dumps(data['chat_record_ids'])
+        
         db_report = Report(
-            **report.model_dump(),
+            **data,
             create_time=datetime.now(),
             create_by=user_id
         )

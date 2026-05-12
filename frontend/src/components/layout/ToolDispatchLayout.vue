@@ -83,7 +83,7 @@ onBeforeMount(() => {
 .tool-dispatch-layout {
   width: 100vw;
   height: 100vh;
-  background-color: #f0f7f0;
+  background-color: #ffffff;
   display: flex;
   flex-direction: column;
 

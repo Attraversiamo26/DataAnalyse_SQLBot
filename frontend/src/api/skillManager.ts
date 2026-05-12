@@ -1,180 +1,181 @@
-import { request } from '@/utils/request';
+import { request } from '@/utils/request'
 
 /**
  * 技能信息接口
  */
 export interface SkillInfo {
-  skill_id: string;
-  short_id: string;
-  name: string;
-  description: string;
-  layer: string;
-  language: string;
-  trigger_patterns: string[];
-  input_params: SkillInputParam[];
-  output_formats: SkillOutputFormat[];
-  outputs: SkillOutputDef[];
-  chain_triggers: SkillChainTrigger[];
-  data_sheets: string[];
-  executable: string;
-  skill_dir: string;
-  steps: SkillInternalStep[];
-  data_file: string;
-  env_requirements: string[];
+  skill_id: string
+  short_id: string
+  name: string
+  description: string
+  layer: string
+  language: string
+  trigger_patterns: string[]
+  input_params: SkillInputParam[]
+  output_formats: SkillOutputFormat[]
+  outputs: SkillOutputDef[]
+  chain_triggers: SkillChainTrigger[]
+  data_sheets: string[]
+  executable: string
+  skill_dir: string
+  steps: SkillInternalStep[]
+  data_file: string
+  env_requirements: string[]
 }
 
 /**
  * 技能输入参数
  */
 export interface SkillInputParam {
-  name: string;
-  type: string;
-  required: boolean;
-  default?: any;
-  description: string;
+  name: string
+  type: string
+  required: boolean
+  default?: any
+  description: string
+  readonly?: boolean
 }
 
 /**
  * 技能输出格式
  */
 export interface SkillOutputFormat {
-  name: string;
-  format: string;
-  path: string;
+  name: string
+  format: string
+  path: string
 }
 
 /**
  * 技能输出定义
  */
 export interface SkillOutputDef {
-  name: string;
-  type: string;
-  value?: string;
-  description?: string;
+  name: string
+  type: string
+  value?: string
+  description?: string
 }
 
 /**
  * 技能链式触发
  */
 export interface SkillChainTrigger {
-  skill_id: string;
-  trigger_type: string;
-  condition?: string;
-  params_mapping: Record<string, string>;
+  skill_id: string
+  trigger_type: string
+  condition?: string
+  params_mapping: Record<string, string>
 }
 
 /**
  * 技能内部步骤
  */
 export interface SkillInternalStep {
-  id: string;
-  name: string;
-  description: string;
-  script: string;
-  language: string;
-  args_template: string[];
-  depends_on: string[];
-  condition?: string;
-  timeout: number;
-  optional: boolean;
-  outputs: SkillOutputDef[];
+  id: string
+  name: string
+  description: string
+  script: string
+  language: string
+  args_template: string[]
+  depends_on: string[]
+  condition?: string
+  timeout: number
+  optional: boolean
+  outputs: SkillOutputDef[]
 }
 
 /**
  * 技能执行请求参数
  */
 export interface SkillExecutionRequest {
-  skill_id: string;
-  params?: Record<string, any>;
-  timeout?: number;
+  skill_id: string
+  params?: Record<string, any>
+  timeout?: number
 }
 
 /**
  * 技能执行结果
  */
 export interface SkillExecutionResult {
-  skill_id: string;
-  success: boolean;
-  output_files: string[];
-  execution_time: number;
-  output?: string;
-  error?: string;
-  error_message?: string;
-  extracted_params?: Record<string, any>;
-  structured_outputs?: Record<string, any>;
-  pending_confirmation?: PendingConfirmation;
+  skill_id: string
+  success: boolean
+  output_files: string[]
+  execution_time: number
+  output?: string
+  error?: string
+  error_message?: string
+  extracted_params?: Record<string, any>
+  structured_outputs?: Record<string, any>
+  pending_confirmation?: PendingConfirmation
 }
 
 /**
  * 待确认信息
  */
 export interface PendingConfirmation {
-  message: string;
-  trigger_skill_id: string;
-  params: Record<string, any>;
-  original_trigger: Record<string, any>;
+  message: string
+  trigger_skill_id: string
+  params: Record<string, any>
+  original_trigger: Record<string, any>
 }
 
 /**
  * 意图匹配结果
  */
 export interface IntentMatchResult {
-  skill_id: string;
-  confidence: number;
-  reason: string;
-  extracted_params?: Record<string, any>;
+  skill_id: string
+  confidence: number
+  reason: string
+  extracted_params?: Record<string, any>
 }
 
 /**
  * 工作流定义
  */
 export interface WorkflowDefinition {
-  workflow_id: string;
-  name: string;
-  description: string;
-  steps: WorkflowStep[];
-  params: SkillInputParam[];
+  workflow_id: string
+  name: string
+  description: string
+  steps: WorkflowStep[]
+  params: SkillInputParam[]
 }
 
 /**
  * 工作流步骤
  */
 export interface WorkflowStep {
-  id: string;
-  skill_id?: string;
-  params?: Record<string, any>;
-  condition?: string;
-  depends_on?: string[];
-  parallel?: boolean;
-  sub_skills?: WorkflowStep[];
+  id: string
+  skill_id?: string
+  params?: Record<string, any>
+  condition?: string
+  depends_on?: string[]
+  parallel?: boolean
+  sub_skills?: WorkflowStep[]
 }
 
 /**
  * 并行执行请求
  */
 export interface ParallelExecutionRequest {
-  skills: { skill_id: string; params?: Record<string, any>; timeout?: number }[];
+  skills: { skill_id: string; params?: Record<string, any>; timeout?: number }[]
 }
 
 /**
  * 工作流执行请求
  */
 export interface WorkflowExecutionRequest {
-  workflow_id?: string;
-  workflow_file?: string;
-  params?: Record<string, any>;
-  timeout?: number;
+  workflow_id?: string
+  workflow_file?: string
+  params?: Record<string, any>
+  timeout?: number
 }
 
 /**
  * 工作流执行结果
  */
 export interface WorkflowExecutionResult {
-  success: boolean;
-  output_files?: string[];
-  execution_time?: number;
-  output?: string;
-  error?: string;
+  success: boolean
+  output_files?: string[]
+  execution_time?: number
+  output?: string
+  error?: string
 }
 
 /**
@@ -187,8 +188,8 @@ export const skillManagerApi = {
    * @returns 技能列表
    */
   getAllSkills: (layer?: string) => {
-    const params = layer ? { layer } : {};
-    return request.get<SkillInfo[]>('/skill-manager/skills', { params });
+    const params = layer ? { layer } : {}
+    return request.get<SkillInfo[]>('/skill-manager/skills', { params })
   },
 
   /**
@@ -197,7 +198,7 @@ export const skillManagerApi = {
    * @returns 匹配的技能列表
    */
   searchSkills: (keyword: string) => {
-    return request.get<SkillInfo[]>('/skill-manager/skills/search', { params: { keyword } });
+    return request.get<SkillInfo[]>('/skill-manager/skills/search', { params: { keyword } })
   },
 
   /**
@@ -206,7 +207,7 @@ export const skillManagerApi = {
    * @returns 技能详情
    */
   getSkill: (skillId: string) => {
-    return request.get<SkillInfo>(`/skill-manager/skills/${skillId}`);
+    return request.get<SkillInfo>(`/skill-manager/skills/${skillId}`)
   },
 
   /**
@@ -221,8 +222,11 @@ export const skillManagerApi = {
       skill_id: skillId,
       params,
       timeout,
-    };
-    return request.post<SkillExecutionResult>(`/skill-manager/skills/${skillId}/execute`, requestBody);
+    }
+    return request.post<SkillExecutionResult>(
+      `/skill-manager/skills/${skillId}/execute`,
+      requestBody
+    )
   },
 
   /**
@@ -237,8 +241,11 @@ export const skillManagerApi = {
       skill_id: skillId,
       params,
       timeout,
-    };
-    return request.post<SkillExecutionResult>(`/skill-manager/skills/${skillId}/execute-steps`, requestBody);
+    }
+    return request.post<SkillExecutionResult>(
+      `/skill-manager/skills/${skillId}/execute-steps`,
+      requestBody
+    )
   },
 
   /**
@@ -253,8 +260,11 @@ export const skillManagerApi = {
       skill_id: skillId,
       params,
       timeout,
-    };
-    return request.post<SkillExecutionResult[]>(`/skill-manager/skills/${skillId}/execute-chain`, requestBody);
+    }
+    return request.post<SkillExecutionResult[]>(
+      `/skill-manager/skills/${skillId}/execute-chain`,
+      requestBody
+    )
   },
 
   /**
@@ -264,7 +274,10 @@ export const skillManagerApi = {
    * @returns 执行结果
    */
   confirmChain: (skillId: string, confirmation: PendingConfirmation) => {
-    return request.post<SkillExecutionResult>(`/skill-manager/skills/${skillId}/confirm-chain`, confirmation);
+    return request.post<SkillExecutionResult>(
+      `/skill-manager/skills/${skillId}/confirm-chain`,
+      confirmation
+    )
   },
 
   /**
@@ -273,7 +286,10 @@ export const skillManagerApi = {
    * @returns 执行结果映射
    */
   executeParallel: (requestData: ParallelExecutionRequest) => {
-    return request.post<Record<string, SkillExecutionResult>>('/skill-manager/skills/execute-parallel', requestData);
+    return request.post<Record<string, SkillExecutionResult>>(
+      '/skill-manager/skills/execute-parallel',
+      requestData
+    )
   },
 
   /**
@@ -282,7 +298,7 @@ export const skillManagerApi = {
    * @returns 匹配的技能列表
    */
   parseIntent: (query: string) => {
-    return request.post<IntentMatchResult[]>('/skill-manager/intent/parse', { query });
+    return request.post<IntentMatchResult[]>('/skill-manager/intent/parse', { query })
   },
 
   /**
@@ -292,7 +308,11 @@ export const skillManagerApi = {
    * @returns 最佳匹配结果
    */
   getBestMatch: (query: string, minConfidence?: number) => {
-    return request.post<IntentMatchResult>('/skill-manager/intent/best-match', { query }, { params: { min_confidence: minConfidence } });
+    return request.post<IntentMatchResult>(
+      '/skill-manager/intent/best-match',
+      { query },
+      { params: { min_confidence: minConfidence } }
+    )
   },
 
   /**
@@ -301,7 +321,7 @@ export const skillManagerApi = {
    * @returns 推荐结果
    */
   getDecisionTree: (query: string) => {
-    return request.post<Record<string, any>>('/skill-manager/intent/decision-tree', { query });
+    return request.post<Record<string, any>>('/skill-manager/intent/decision-tree', { query })
   },
 
   /**
@@ -312,7 +332,11 @@ export const skillManagerApi = {
    * @returns 执行结果
    */
   runWorkflow: (query: string, params?: Record<string, any>, timeout?: number) => {
-    return request.post<Record<string, any>>('/skill-manager/workflow/run', { query, params, timeout });
+    return request.post<Record<string, any>>('/skill-manager/workflow/run', {
+      query,
+      params,
+      timeout,
+    })
   },
 
   /**
@@ -321,7 +345,7 @@ export const skillManagerApi = {
    * @returns 执行结果
    */
   executeWorkflow: (requestData: WorkflowExecutionRequest) => {
-    return request.post<WorkflowExecutionResult>('/skill-manager/workflow/execute', requestData);
+    return request.post<WorkflowExecutionResult>('/skill-manager/workflow/execute', requestData)
   },
 
   /**
@@ -329,7 +353,7 @@ export const skillManagerApi = {
    * @returns 工作流列表
    */
   listWorkflows: () => {
-    return request.get<WorkflowDefinition[]>('/skill-manager/workflow/list');
+    return request.get<WorkflowDefinition[]>('/skill-manager/workflow/list')
   },
 
   /**
@@ -337,6 +361,6 @@ export const skillManagerApi = {
    * @returns 重新加载结果
    */
   reloadSkills: () => {
-    return request.post<{ message: string; count: number }>('/skill-manager/skills/reload');
+    return request.post<{ message: string; count: number }>('/skill-manager/skills/reload')
   },
-};
+}

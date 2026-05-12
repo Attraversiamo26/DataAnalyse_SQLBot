@@ -77,6 +77,20 @@ export const routes = [
     ],
   },
   {
+    path: '/skill',
+    name: 'skill',
+    component: ToolDispatchLayout,
+    redirect: '/skill/list',
+    children: [
+      {
+        path: 'list',
+        name: 'skill-list',
+        component: SkillManagerView,
+        meta: { title: '技能管理', iconActive: 'skill', iconDeActive: 'noSkill' },
+      },
+    ],
+  },
+  {
     path: '/tools',
     component: ToolDispatchLayout,
     redirect: '/tools/tool-select',
@@ -117,12 +131,6 @@ export const routes = [
         name: 'tools-report',
         component: ReportView,
         meta: { title: '报告生成', iconActive: 'chart', iconDeActive: 'noChart' },
-      },
-      {
-        path: 'skill-manager',
-        name: 'tools-skill-manager',
-        component: SkillManagerView,
-        meta: { title: '技能管理', iconActive: 'dashboard', iconDeActive: 'noDashboard' },
       },
       {
         path: 'data-agent',

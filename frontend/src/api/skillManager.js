@@ -123,7 +123,11 @@ export const skillManagerApi = {
      * @returns 执行结果
      */
     runWorkflow: (query, params, timeout) => {
-        return request.post('/skill-manager/workflow/run', { query, params, timeout });
+        return request.post('/skill-manager/workflow/run', {
+            query,
+            params,
+            timeout,
+        });
     },
     /**
      * 执行工作流

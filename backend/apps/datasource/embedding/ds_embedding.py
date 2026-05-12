@@ -88,4 +88,11 @@ def get_ds_embedding(session: SessionDep, current_user: CurrentUser, _ds_list, o
                         for obj in _list]
             except Exception:
                 traceback.print_exc()
-    return _list
+                # 如果嵌入计算失败，返回原始的字典列表，不包含 CoreDatasource 对象
+                return [{"id": obj.get('id'), "name": obj.get('ds').name if obj.get('ds') else '', 
+                        "description": obj.get('ds').description if obj.get('ds') else ''}
+                        for obj in _list]
+    # 如果没有执行嵌入计算，返回原始的字典列表
+    return [{"id": obj.get('id'), "name": obj.get('ds').name if obj.get('ds') else '', 
+            "description": obj.get('ds').description if obj.get('ds') else ''}
+            for obj in _list]

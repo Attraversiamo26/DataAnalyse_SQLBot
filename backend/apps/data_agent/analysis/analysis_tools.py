@@ -4,11 +4,11 @@ import json
 import matplotlib.pyplot as plt
 import io
 import base64
-from typing import Dict, Any, List
+import re
+from typing import Dict, Any, List, Optional, Set
 
-# 设置matplotlib中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']  # 用来正常显示中文标签
-plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 
 class AnalysisTools:
     """数据分析工具类"""
@@ -33,7 +33,6 @@ class AnalysisTools:
                     result["stats"][col] = stats
                     print(f"生成的统计信息: {stats.keys()}")
                     
-                    # 生成图表
                     chart_data = AnalysisTools._generate_histogram(df[col], col)
                     if chart_data:
                         result["charts"][col] = chart_data
@@ -48,7 +47,6 @@ class AnalysisTools:
                     }
                     print(f"生成的统计信息: count={result['stats'][col]['count']}, unique={result['stats'][col]['unique']}")
                     
-                    # 生成柱状图
                     if df[col].nunique() <= 20:
                         chart_data = AnalysisTools._generate_bar_chart(df[col], col)
                         if chart_data:
@@ -73,7 +71,6 @@ class AnalysisTools:
             "charts": {}
         }
         
-        # 确保只选择数值列
         numeric_columns = [col for col in columns if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
         print(f"筛选后的数值列: {numeric_columns}")
         
@@ -83,7 +80,6 @@ class AnalysisTools:
             result["correlation_matrix"] = corr_matrix.to_dict()
             print(f"相关系数矩阵计算完成，形状: {corr_matrix.shape}")
             
-            # 生成热力图
             chart_data = AnalysisTools._generate_heatmap(corr_matrix, "相关性矩阵")
             if chart_data:
                 result["charts"]["correlation_matrix"] = chart_data
@@ -111,18 +107,15 @@ class AnalysisTools:
                 print(f"分析列: {col}")
                 if pd.api.types.is_numeric_dtype(df[col]):
                     print(f"列 {col} 是数值类型")
-                    # 计算分位数
                     quantiles = df[col].quantile([0.01, 0.25, 0.5, 0.75, 0.99]).to_dict()
                     print(f"计算的分位数: {quantiles}")
-                    # 计算频率分布
+                    
                     if len(df[col]) <= 100:
                         value_counts = df[col].value_counts().to_dict()
                         print(f"计算的值分布: {value_counts}")
                     else:
-                        # 对于大数据集，使用分箱
                         bins = min(10, len(df[col].unique()))
                         value_counts_series = df[col].value_counts(bins=bins)
-                        # 将Interval类型的键转换为字符串
                         value_counts = {str(key): value for key, value in value_counts_series.items()}
                         print(f"计算的分箱分布 (bins={bins}): {value_counts}")
                     
@@ -131,7 +124,6 @@ class AnalysisTools:
                         "value_counts": value_counts
                     }
                     
-                    # 生成分布直方图
                     chart_data = AnalysisTools._generate_histogram(df[col], col)
                     if chart_data:
                         result["charts"][col] = chart_data
@@ -155,7 +147,6 @@ class AnalysisTools:
             "charts": {}
         }
         
-        # 尝试识别时间列
         time_column = None
         value_columns = []
         
@@ -173,12 +164,10 @@ class AnalysisTools:
         
         if time_column and value_columns:
             print(f"时间列: {time_column}, 值列: {value_columns}")
-            # 按时间排序
             df_sorted = df.sort_values(time_column)
             print(f"数据按时间排序完成，共 {len(df_sorted)} 行")
             
             for col in value_columns:
-                # 计算移动平均
                 df_sorted[f"{col}_ma"] = df_sorted[col].rolling(window=7).mean()
                 print(f"计算 {col} 的移动平均")
                 
@@ -189,7 +178,6 @@ class AnalysisTools:
                 }
                 print(f"生成 {col} 的趋势数据")
                 
-                # 生成趋势图
                 chart_data = AnalysisTools._generate_line_chart(df_sorted, time_column, col, f"{col}_ma")
                 if chart_data:
                     result["charts"][col] = chart_data
@@ -213,19 +201,16 @@ class AnalysisTools:
         }
         
         try:
-            # 尝试导入机器学习库
             from sklearn.model_selection import train_test_split
             from sklearn.linear_model import LinearRegression
             from sklearn.metrics import mean_squared_error, r2_score
             print("成功导入scikit-learn库")
             
-            # 确保只选择数值列
             numeric_columns = [col for col in columns if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
             print(f"筛选后的数值列: {numeric_columns}")
             
             if len(numeric_columns) >= 2:
                 print(f"数值列数量: {len(numeric_columns)}，开始预测分析")
-                # 使用最后一列作为目标变量
                 target_col = numeric_columns[-1]
                 feature_cols = numeric_columns[:-1]
                 print(f"目标列: {target_col}, 特征列: {feature_cols}")
@@ -234,39 +219,32 @@ class AnalysisTools:
                 y = df[target_col]
                 print(f"特征数据形状: {X.shape}, 目标数据形状: {y.shape}")
                 
-                # 处理缺失值
                 X = X.dropna()
                 y = y.loc[X.index]
                 print(f"处理缺失值后，数据形状: {X.shape}")
                 
                 if len(X) > 10:
                     print("数据量充足，开始模型训练")
-                    # 限制数据量，提高性能
                     if len(X) > 1000:
                         print("数据量较大，限制为1000行以提高性能")
                         X = X.sample(1000, random_state=42)
                         y = y.loc[X.index]
                         print(f"限制后的数据形状: {X.shape}")
                     
-                    # 分割训练集和测试集
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
                     print(f"训练集大小: {X_train.shape}, 测试集大小: {X_test.shape}")
                     
-                    # 训练线性回归模型
                     model = LinearRegression()
                     model.fit(X_train, y_train)
                     print("模型训练完成")
                     
-                    # 预测
                     y_pred = model.predict(X_test)
                     print("模型预测完成")
                     
-                    # 计算评估指标
                     mse = mean_squared_error(y_test, y_pred)
                     r2 = r2_score(y_test, y_pred)
                     print(f"模型评估指标 - MSE: {mse}, R2: {r2}")
                     
-                    # 准备结果数据
                     result["predictions"] = {
                         "model": "Linear Regression",
                         "target_column": target_col,
@@ -278,7 +256,6 @@ class AnalysisTools:
                     }
                     print("生成预测结果数据")
                     
-                    # 生成预测结果图
                     chart_data = AnalysisTools._generate_scatter_chart(
                         y_test,
                         y_pred,
@@ -324,19 +301,16 @@ class AnalysisTools:
         }
         
         try:
-            # 尝试导入机器学习库
             from sklearn.model_selection import train_test_split
             from sklearn.linear_model import LogisticRegression
             from sklearn.metrics import accuracy_score, classification_report
             print("成功导入scikit-learn库")
             
-            # 确保只选择数值列
             numeric_columns = [col for col in columns if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
             print(f"筛选后的数值列: {numeric_columns}")
             
             if len(numeric_columns) >= 2:
                 print(f"数值列数量: {len(numeric_columns)}，开始分类分析")
-                # 使用最后一列作为目标变量
                 target_col = numeric_columns[-1]
                 feature_cols = numeric_columns[:-1]
                 print(f"目标列: {target_col}, 特征列: {feature_cols}")
@@ -345,39 +319,32 @@ class AnalysisTools:
                 y = df[target_col]
                 print(f"特征数据形状: {X.shape}, 目标数据形状: {y.shape}")
                 
-                # 处理缺失值
                 X = X.dropna()
                 y = y.loc[X.index]
                 print(f"处理缺失值后，数据形状: {X.shape}")
                 
                 if len(X) > 10:
                     print("数据量充足，开始模型训练")
-                    # 限制数据量，提高性能
                     if len(X) > 1000:
                         print("数据量较大，限制为1000行以提高性能")
                         X = X.sample(1000, random_state=42)
                         y = y.loc[X.index]
                         print(f"限制后的数据形状: {X.shape}")
                     
-                    # 分割训练集和测试集
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
                     print(f"训练集大小: {X_train.shape}, 测试集大小: {X_test.shape}")
                     
-                    # 训练逻辑回归模型
                     model = LogisticRegression()
                     model.fit(X_train, y_train)
                     print("模型训练完成")
                     
-                    # 预测
                     y_pred = model.predict(X_test)
                     print("模型预测完成")
                     
-                    # 计算评估指标
                     accuracy = accuracy_score(y_test, y_pred)
                     report = classification_report(y_test, y_pred, output_dict=True)
                     print(f"模型评估指标 - 准确率: {accuracy}")
                     
-                    # 准备结果数据
                     result["classification"] = {
                         "model": "Logistic Regression",
                         "target_column": target_col,
@@ -424,7 +391,6 @@ class AnalysisTools:
         for col in columns:
             if col in df.columns and pd.api.types.is_numeric_dtype(df[col]):
                 print(f"分析列: {col}")
-                # 使用IQR方法检测异常值
                 Q1 = df[col].quantile(0.25)
                 Q3 = df[col].quantile(0.75)
                 IQR = Q3 - Q1
@@ -432,7 +398,6 @@ class AnalysisTools:
                 upper_bound = Q3 + 1.5 * IQR
                 print(f"计算的边界值 - 下限: {lower_bound}, 上限: {upper_bound}")
                 
-                # 识别异常值
                 outliers = df[(df[col] < lower_bound) | (df[col] > upper_bound)][col]
                 print(f"检测到的异常值数量: {len(outliers)}")
                 print(f"异常值: {outliers.tolist()}")
@@ -445,7 +410,6 @@ class AnalysisTools:
                 }
                 print(f"生成 {col} 的异常值数据")
                 
-                # 生成异常值检测图
                 chart_data = AnalysisTools._generate_box_plot(df[col], col)
                 if chart_data:
                     result["charts"][col] = chart_data
@@ -469,7 +433,6 @@ class AnalysisTools:
             "charts": {}
         }
         
-        # 尝试识别时间列
         time_column = None
         value_columns = []
         
@@ -487,12 +450,10 @@ class AnalysisTools:
         
         if time_column and value_columns:
             print(f"时间列: {time_column}, 值列: {value_columns}")
-            # 按时间排序
             df_sorted = df.sort_values(time_column)
             print(f"数据按时间排序完成，共 {len(df_sorted)} 行")
             
             for col in value_columns:
-                # 计算基本统计量
                 mean = df_sorted[col].mean()
                 std = df_sorted[col].std()
                 print(f"{col} 的统计量 - 均值: {mean}, 标准差: {std}")
@@ -504,7 +465,6 @@ class AnalysisTools:
                 }
                 print(f"生成 {col} 的时间序列数据")
                 
-                # 生成时间序列图
                 chart_data = AnalysisTools._generate_line_chart(df_sorted, time_column, col)
                 if chart_data:
                     result["charts"][col] = chart_data
@@ -528,41 +488,34 @@ class AnalysisTools:
         }
         
         try:
-            # 尝试导入机器学习库
             from sklearn.cluster import KMeans
             from sklearn.preprocessing import StandardScaler
             print("成功导入scikit-learn库")
             
-            # 确保只选择数值列
             numeric_columns = [col for col in columns if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
             print(f"筛选后的数值列: {numeric_columns}")
             
             if len(numeric_columns) >= 2:
                 print(f"数值列数量: {len(numeric_columns)}，开始聚类分析")
-                # 准备数据
                 X = df[numeric_columns]
                 X = X.dropna()
                 print(f"处理缺失值后，数据形状: {X.shape}")
                 
                 if len(X) > 10:
                     print("数据量充足，开始聚类分析")
-                    # 限制数据量，提高性能
                     if len(X) > 1000:
                         print("数据量较大，限制为1000行以提高性能")
                         X = X.sample(1000, random_state=42)
                         print(f"限制后的数据形状: {X.shape}")
                     
-                    # 标准化数据
                     scaler = StandardScaler()
                     X_scaled = scaler.fit_transform(X)
                     print("数据标准化完成")
                     
-                    # 执行K-means聚类
                     kmeans = KMeans(n_clusters=3, random_state=42)
                     clusters = kmeans.fit_predict(X_scaled)
                     print("K-means聚类完成")
                     
-                    # 添加聚类结果到数据框
                     X_with_clusters = X.copy()
                     X_with_clusters['cluster'] = clusters
                     print(f"聚类结果: {X_with_clusters['cluster'].value_counts().to_dict()}")
@@ -576,7 +529,6 @@ class AnalysisTools:
                     }
                     print("生成聚类结果数据")
                     
-                    # 生成聚类可视化图（仅支持二维数据）
                     if len(numeric_columns) == 2:
                         print("生成二维聚类可视化图")
                         chart_data = AnalysisTools._generate_scatter_chart(
@@ -627,19 +579,16 @@ class AnalysisTools:
         }
         
         try:
-            # 尝试导入机器学习库
             from sklearn.model_selection import train_test_split
             from sklearn.linear_model import LinearRegression
             from sklearn.metrics import mean_squared_error, r2_score
             print("成功导入scikit-learn库")
             
-            # 确保只选择数值列
             numeric_columns = [col for col in columns if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
             print(f"筛选后的数值列: {numeric_columns}")
             
             if len(numeric_columns) >= 2:
                 print(f"数值列数量: {len(numeric_columns)}，开始回归分析")
-                # 使用最后一列作为目标变量
                 target_col = numeric_columns[-1]
                 feature_cols = numeric_columns[:-1]
                 print(f"目标列: {target_col}, 特征列: {feature_cols}")
@@ -648,32 +597,26 @@ class AnalysisTools:
                 y = df[target_col]
                 print(f"特征数据形状: {X.shape}, 目标数据形状: {y.shape}")
                 
-                # 处理缺失值
                 X = X.dropna()
                 y = y.loc[X.index]
                 print(f"处理缺失值后，数据形状: {X.shape}")
                 
                 if len(X) > 10:
                     print("数据量充足，开始模型训练")
-                    # 分割训练集和测试集
                     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
                     print(f"训练集大小: {X_train.shape}, 测试集大小: {X_test.shape}")
                     
-                    # 训练线性回归模型
                     model = LinearRegression()
                     model.fit(X_train, y_train)
                     print("模型训练完成")
                     
-                    # 预测
                     y_pred = model.predict(X_test)
                     print("模型预测完成")
                     
-                    # 计算评估指标
                     mse = mean_squared_error(y_test, y_pred)
                     r2 = r2_score(y_test, y_pred)
                     print(f"模型评估指标 - MSE: {mse}, R2: {r2}")
                     
-                    # 准备结果数据
                     result["regression"] = {
                         "model": "Linear Regression",
                         "target_column": target_col,
@@ -685,7 +628,6 @@ class AnalysisTools:
                     }
                     print("生成回归结果数据")
                     
-                    # 生成回归结果图
                     chart_data = AnalysisTools._generate_scatter_chart(
                         y_test,
                         y_pred,
@@ -730,7 +672,6 @@ class AnalysisTools:
             plt.ylabel('频率')
             plt.grid(True, alpha=0.3)
             
-            # 保存为base64
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png')
             buffer.seek(0)
@@ -754,7 +695,6 @@ class AnalysisTools:
             plt.xticks(rotation=45)
             plt.tight_layout()
             
-            # 保存为base64
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png')
             buffer.seek(0)
@@ -781,7 +721,6 @@ class AnalysisTools:
             plt.xticks(rotation=45)
             plt.tight_layout()
             
-            # 保存为base64
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png')
             buffer.seek(0)
@@ -808,7 +747,6 @@ class AnalysisTools:
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
             
-            # 保存为base64
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png')
             buffer.seek(0)
@@ -831,7 +769,6 @@ class AnalysisTools:
             plt.yticks(range(len(data.index)), data.index)
             plt.tight_layout()
             
-            # 保存为base64
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png')
             buffer.seek(0)
@@ -853,7 +790,6 @@ class AnalysisTools:
             plt.grid(True, alpha=0.3)
             plt.tight_layout()
             
-            # 保存为base64
             buffer = io.BytesIO()
             plt.savefig(buffer, format='png')
             buffer.seek(0)
@@ -874,7 +810,6 @@ class AnalysisTools:
             print(f"数据形状: {df.shape}")
             print(f"数据列: {list(df.columns)}")
             
-            # 验证列是否存在
             valid_columns = [col for col in columns if col in df.columns]
             if len(valid_columns) != len(columns):
                 invalid_columns = [col for col in columns if col not in df.columns]
@@ -882,17 +817,13 @@ class AnalysisTools:
                 columns = valid_columns
             print(f"验证后的列: {columns}")
             
-            # 自动类型推断
             print("开始类型推断...")
             for col in df.columns:
-                # 先尝试转换为数值类型
                 numeric_col = pd.to_numeric(df[col], errors='coerce')
-                # 如果转换成功（不是全为NaN），则使用数值类型
                 if not numeric_col.isna().all():
                     df[col] = numeric_col
                     print(f"列 {col} 转换为数值类型")
                 else:
-                    # 否则尝试转换为日期时间类型
                     try:
                         date_col = pd.to_datetime(df[col], errors='coerce')
                         if not date_col.isna().all():
@@ -901,7 +832,6 @@ class AnalysisTools:
                     except:
                         pass
             
-            # 根据分析类型执行相应的分析
             if analysis_type == "descriptive":
                 return AnalysisTools.descriptive_analysis(df, columns)
             elif analysis_type == "correlation":
@@ -922,9 +852,471 @@ class AnalysisTools:
                 return AnalysisTools.clustering_analysis(df, columns)
             elif analysis_type == "regression":
                 return AnalysisTools.regression_analysis(df, columns)
+            elif analysis_type == "comparison":
+                return IntelligentComparisonAnalyzer.comparison_analysis(df, columns)
+            elif analysis_type == "competitive":
+                return IntelligentComparisonAnalyzer.comparison_analysis(df, columns)
+            elif analysis_type == "direct_analysis":
+                return {"analysis_type": "direct_analysis", "message": "需要大模型直接分析数据"}
             else:
                 print(f"不支持的分析类型: {analysis_type}")
                 return {"error": f"不支持的分析类型: {analysis_type}"}
         except Exception as e:
             print(f"分析过程中发生错误: {str(e)}")
             return {"error": str(e)}
+
+
+class IntelligentComparisonAnalyzer:
+    """智能对比分析器 - 不硬编码维度，智能识别分组"""
+    
+    @staticmethod
+    def comparison_analysis(
+        df: pd.DataFrame,
+        query_or_columns: Any,
+        primary_metrics: Any = None,
+        secondary_metrics: Any = None
+    ) -> Dict[str, Any]:
+        """
+        对比分析 - 智能识别分组维度并计算差异
+        
+        Args:
+            df: 数据集
+            query_or_columns: 用户查询字符串或列名列表
+            primary_metrics: 主要对比指标列表（如次日递率）
+            secondary_metrics: 次要指标列表（如行业对比）
+        
+        Returns:
+            包含分组统计和差异计算的完整结果
+        """
+        print(f"执行智能对比分析")
+        
+        # 处理不同的调用方式
+        query = ""
+        columns = []
+        
+        if isinstance(query_or_columns, str):
+            query = query_or_columns
+            columns = primary_metrics if primary_metrics else []
+        elif isinstance(query_or_columns, list):
+            columns = query_or_columns
+            primary_metrics = primary_metrics if primary_metrics else columns
+        else:
+            columns = []
+        
+        print(f"用户查询: {query}")
+        print(f"主要指标: {primary_metrics}")
+        print(f"数据形状: {df.shape}")
+        
+        result = {
+            "analysis_type": "comparison",
+            "query": query,
+            "primary_metrics": primary_metrics or [],
+            "secondary_metrics": secondary_metrics or [],
+            "results": {},
+            "conclusions": [],
+            "charts": {}
+        }
+        
+        # 1. 从查询中提取分组维度（智能识别，不硬编码）
+        group_dimensions = IntelligentComparisonAnalyzer._extract_group_dimensions(query, df)
+        print(f"识别到的分组维度: {group_dimensions}")
+        
+        if not group_dimensions:
+            print("警告：未能识别到分组维度，尝试自动检测")
+            group_dimensions = IntelligentComparisonAnalyzer._detect_group_dimensions(df)
+            print(f"自动检测到的分组维度: {group_dimensions}")
+        
+        if not group_dimensions:
+            print("警告：无法找到任何分组维度，对比分析无法执行")
+            result["error"] = "无法识别分组维度"
+            return result
+        
+        # 2. 对每个维度进行分组统计
+        metrics_list = (primary_metrics or []) + (secondary_metrics or [])
+        
+        for dimension in group_dimensions:
+            print(f"\n分析维度: {dimension}")
+            dimension_stats = IntelligentComparisonAnalyzer._calculate_group_statistics(
+                df, dimension, metrics_list
+            )
+            
+            # 3. 计算类别间差异
+            differences = IntelligentComparisonAnalyzer._calculate_pairwise_differences(
+                dimension_stats, metrics_list
+            )
+            
+            # 4. 识别关键差异
+            summary = IntelligentComparisonAnalyzer._identify_key_differences(
+                differences, metrics_list
+            )
+            
+            # 5. 生成对比结论
+            conclusions = IntelligentComparisonAnalyzer._generate_comparison_conclusions(
+                dimension, differences, summary, metrics_list
+            )
+            
+            result["results"][dimension] = {
+                "categories": dimension_stats["categories"],
+                "statistics": dimension_stats["statistics"],
+                "differences": differences,
+                "summary": summary,
+                "conclusions": conclusions
+            }
+            result["conclusions"].extend(conclusions)
+            
+            # 6. 生成对比图表
+            chart_data = IntelligentComparisonAnalyzer._generate_comparison_chart(
+                df, dimension, metrics_list
+            )
+            if chart_data:
+                result["charts"][dimension] = chart_data
+        
+        print(f"\n智能对比分析完成，生成 {len(result['conclusions'])} 条结论")
+        return result
+    
+    @staticmethod
+    def _extract_group_dimensions(query: str, df: pd.DataFrame) -> List[str]:
+        """
+        从查询中智能提取分组维度
+        
+        不硬编码维度，而是：
+        1. 识别查询中提到的具体类别
+        2. 找到包含这些类别的列作为分组维度
+        """
+        print(f"从查询中提取分组维度，查询: {query[:100]}...")
+        
+        found_categories = set()
+        
+        region_keywords = [
+            '长三角', '珠三角', '环渤海', '京津冀', '粤港澳',
+            '成渝', '中部地区', '西部地区', '东北地区', '华东地区',
+            '华南地区', '华北地区', '华中地区', '西南地区', '西北地区'
+        ]
+        
+        for keyword in region_keywords:
+            if keyword in query:
+                found_categories.add(keyword)
+                print(f"找到区域类别: {keyword}")
+        
+        product_keywords = ['特快', '普快', '经济', '标准', '次日', '隔日']
+        for keyword in product_keywords:
+            if keyword in query:
+                found_categories.add(keyword)
+                print(f"找到产品类别: {keyword}")
+        
+        quoted_patterns = re.findall(r"['\"]([^'\"]+)['\"]", query)
+        found_categories.update(quoted_patterns)
+        if quoted_patterns:
+            print(f"从引号中找到类别: {quoted_patterns}")
+        
+        year_patterns = re.findall(r'\d{4}年', query)
+        found_categories.update(year_patterns)
+        if year_patterns:
+            print(f"找到年份类别: {year_patterns}")
+        
+        potential_dimensions = []
+        
+        if found_categories:
+            print(f"找到的类别: {found_categories}")
+            
+            for col in df.columns:
+                if df[col].dtype == 'object':
+                    try:
+                        col_categories = set(df[col].astype(str).unique())
+                        matching = col_categories & found_categories
+                        
+                        if matching:
+                            print(f"列 '{col}' 包含匹配类别: {matching}")
+                            potential_dimensions.append(col)
+                    except:
+                        continue
+        
+        return potential_dimensions
+    
+    @staticmethod
+    def _detect_group_dimensions(df: pd.DataFrame) -> List[str]:
+        """
+        自动检测适合分组的维度
+        
+        选择：
+        - 类别数量适中（2-20个）的文本列
+        - 具有明确分组意义的列
+        """
+        print("自动检测分组维度...")
+        
+        potential = []
+        
+        for col in df.columns:
+            if df[col].dtype == 'object':
+                unique_count = df[col].nunique()
+                
+                if 'id' in col.lower() or 'time' in col.lower() or 'date' in col.lower():
+                    continue
+                
+                if 2 <= unique_count <= 20:
+                    potential.append((col, unique_count))
+                    print(f"候选列: {col}, 类别数: {unique_count}")
+        
+        potential.sort(key=lambda x: x[1])
+        
+        return [col for col, _ in potential[:3]]
+    
+    @staticmethod
+    def _calculate_group_statistics(
+        df: pd.DataFrame,
+        dimension: str,
+        metrics: List[str]
+    ) -> Dict[str, Any]:
+        """对指定维度计算分组统计"""
+        print(f"计算 '{dimension}' 维度的分组统计")
+        
+        categories = df[dimension].unique().tolist()
+        print(f"类别数量: {len(categories)}")
+        print(f"类别列表: {categories[:5]}...")
+        
+        statistics = {
+            "categories": categories,
+            "statistics": {}
+        }
+        
+        for metric in metrics:
+            if metric not in df.columns:
+                print(f"警告: 指标 '{metric}' 不在数据中")
+                continue
+            
+            if not pd.api.types.is_numeric_dtype(df[metric]):
+                print(f"警告: 指标 '{metric}' 不是数值类型")
+                continue
+            
+            metric_stats = {}
+            
+            for category in categories:
+                category_data = df[df[dimension] == category][metric]
+                
+                if len(category_data) > 0:
+                    metric_stats[category] = {
+                        'count': int(len(category_data)),
+                        'mean': float(category_data.mean()),
+                        'std': float(category_data.std()) if len(category_data) > 1 else 0.0,
+                        'min': float(category_data.min()),
+                        'max': float(category_data.max()),
+                        'median': float(category_data.median()),
+                        'q25': float(category_data.quantile(0.25)),
+                        'q75': float(category_data.quantile(0.75))
+                    }
+            
+            if metric_stats:
+                statistics["statistics"][metric] = metric_stats
+        
+        print(f"统计计算完成，指标数: {len(statistics['statistics'])}")
+        return statistics
+    
+    @staticmethod
+    def _calculate_pairwise_differences(
+        stats: Dict,
+        metrics: List[str]
+    ) -> Dict[str, Any]:
+        """
+        计算两两之间的差异
+        
+        支持多种差异计算方式
+        """
+        print(f"计算两两之间的差异，指标: {metrics}")
+        
+        differences = {}
+        
+        if not stats.get("categories") or not metrics:
+            return differences
+        
+        first_metric = metrics[0] if metrics else None
+        
+        if not first_metric or first_metric not in stats.get("statistics", {}):
+            return differences
+        
+        category_values = stats["statistics"][first_metric]
+        category_list = list(category_values.keys())
+        
+        for i, cat1 in enumerate(category_list):
+            for j, cat2 in enumerate(category_list):
+                if i >= j:
+                    continue
+                
+                pair_key = f"{cat1}_vs_{cat2}"
+                differences[pair_key] = {
+                    "category_pair": (cat1, cat2),
+                    "metrics": {}
+                }
+                
+                for metric in metrics:
+                    if metric not in stats["statistics"]:
+                        continue
+                    
+                    cat1_data = stats["statistics"][metric].get(cat1, {})
+                    cat2_data = stats["statistics"][metric].get(cat2, {})
+                    
+                    val1 = cat1_data.get('mean', 0)
+                    val2 = cat2_data.get('mean', 0)
+                    
+                    absolute_diff = abs(val1 - val2)
+                    max_val = max(abs(val1), abs(val2), 0.001)
+                    relative_diff = (absolute_diff / max_val) * 100 if max_val > 0 else 0
+                    
+                    differences[pair_key]["metrics"][metric] = {
+                        'absolute_diff': float(absolute_diff),
+                        'relative_diff_percent': float(relative_diff),
+                        'cat1_value': float(val1),
+                        'cat2_value': float(val2),
+                        'winner': cat1 if val1 > val2 else cat2,
+                        'diff_direction': 'higher' if val1 > val2 else 'lower'
+                    }
+        
+        print(f"计算完成，共 {len(differences)} 对差异")
+        return differences
+    
+    @staticmethod
+    def _identify_key_differences(
+        differences: Dict,
+        metrics: List[str]
+    ) -> Dict[str, Any]:
+        """识别关键差异"""
+        print("识别关键差异...")
+        
+        summary = {
+            "max_difference_pairs": [],
+            "min_difference_pairs": [],
+            "rankings": {}
+        }
+        
+        for metric in metrics:
+            metric_diffs = []
+            
+            for pair_key, diff_info in differences.items():
+                if "metrics" in diff_info and metric in diff_info["metrics"]:
+                    diff_data = diff_info["metrics"][metric]
+                    metric_diffs.append({
+                        'pair': pair_key,
+                        'categories': diff_info.get('category_pair'),
+                        'absolute_diff': diff_data.get('absolute_diff', 0),
+                        'relative_diff_percent': diff_data.get('relative_diff_percent', 0),
+                        'winner': diff_data.get('winner'),
+                        'values': (diff_data.get('cat1_value'), diff_data.get('cat2_value'))
+                    })
+            
+            metric_diffs.sort(key=lambda x: x['absolute_diff'], reverse=True)
+            summary["rankings"][metric] = metric_diffs
+            
+            if metric_diffs:
+                summary["max_difference_pairs"].append(metric_diffs[0])
+                summary["min_difference_pairs"].append(metric_diffs[-1])
+        
+        print(f"识别完成，最大差异: {len(summary['max_difference_pairs'])} 对")
+        return summary
+    
+    @staticmethod
+    def _generate_comparison_conclusions(
+        dimension: str,
+        differences: Dict,
+        summary: Dict,
+        metrics: List[str]
+    ) -> List[str]:
+        """生成对比分析结论"""
+        print(f"生成对比分析结论，维度: {dimension}")
+        
+        conclusions = []
+        
+        max_diffs = summary.get("max_difference_pairs", [])
+        
+        for diff_info in max_diffs[:3]:
+            pair = diff_info.get('pair', '')
+            categories = diff_info.get('categories', ('', ''))
+            absolute = diff_info.get('absolute_diff', 0)
+            relative = diff_info.get('relative_diff_percent', 0)
+            winner = diff_info.get('winner', '')
+            
+            if pair and categories:
+                cat1, cat2 = categories
+                
+                conclusion = (
+                    f"在【{dimension}】维度，{cat1}与{cat2}的差异最为显著。"
+                    f"{cat1}均值为{diff_info.get('values', (0, 0))[0]:.2f}，"
+                    f"{cat2}均值为{diff_info.get('values', (0, 0))[1]:.2f}，"
+                    f"绝对差异为{absolute:.2f}，"
+                    f"相对差异为{relative:.1f}%。"
+                    f"{winner}表现相对较好。"
+                )
+                
+                conclusions.append(conclusion)
+                print(f"结论: {conclusion}")
+        
+        for metric in metrics:
+            rankings = summary.get("rankings", {}).get(metric, [])
+            
+            if rankings:
+                best = rankings[0]
+                worst = rankings[-1]
+                
+                if best.get('winner'):
+                    conclusion = (
+                        f"就【{metric}】指标而言，"
+                        f"{best.get('winner')}表现最佳（均值{best.get('values', (0, 0))[0]:.2f}），"
+                        f"{worst.get('categories', ['', ''])[0] if worst.get('categories') else ''}表现较弱（均值{worst.get('values', (0, 0))[1]:.2f}）。"
+                    )
+                    
+                    if conclusion not in conclusions:
+                        conclusions.append(conclusion)
+                        print(f"排名结论: {conclusion}")
+        
+        return conclusions
+    
+    @staticmethod
+    def _generate_comparison_chart(
+        df: pd.DataFrame,
+        dimension: str,
+        metrics: List[str]
+    ) -> Optional[str]:
+        """生成对比图表"""
+        try:
+            print(f"生成对比图表，维度: {dimension}")
+            
+            metric = metrics[0] if metrics else None
+            if not metric or metric not in df.columns:
+                return None
+            
+            categories = df[dimension].unique()[:10]
+            
+            if len(categories) < 2:
+                print("类别太少，跳过图表生成")
+                return None
+            
+            means = []
+            for cat in categories:
+                cat_data = df[df[dimension] == cat][metric]
+                means.append(cat_data.mean() if len(cat_data) > 0 else 0)
+            
+            plt.figure(figsize=(12, 6))
+            x_pos = range(len(categories))
+            bars = plt.bar(x_pos, means, alpha=0.7, color='steelblue')
+            
+            plt.xlabel(dimension)
+            plt.ylabel(metric)
+            plt.title(f"{metric} 在不同 {dimension} 的对比")
+            plt.xticks(x_pos, categories, rotation=45, ha='right')
+            plt.grid(True, alpha=0.3)
+            plt.tight_layout()
+            
+            for i, (bar, mean) in enumerate(zip(bars, means)):
+                plt.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
+                        f'{mean:.2f}', ha='center', va='bottom', fontsize=9)
+            
+            buffer = io.BytesIO()
+            plt.savefig(buffer, format='png', dpi=100)
+            buffer.seek(0)
+            image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+            plt.close()
+            
+            print("图表生成成功")
+            return f"data:image/png;base64,{image_base64}"
+            
+        except Exception as e:
+            print(f"图表生成失败: {str(e)}")
+            return None

@@ -30,6 +30,9 @@ const selectedChatDetail = ref(null);
 // 报告生成相关
 const isGeneratingReport = ref(false);
 const generatedReport = ref(null);
+// 数据源相关
+const datasourceList = ref([]);
+const selectedDatasource = ref('');
 const reports = ref([]);
 // 处理文件拖放
 const handleDrop = (event) => {
@@ -124,7 +127,7 @@ const generateQuestions = async () => {
     isGeneratingQuestions.value = true;
     try {
         const response = await dataAgentApi.generateQuestions({
-            focus_content: parsedFocusContent.value
+            focus_content: parsedFocusContent.value,
         });
         console.log('生成问题响应:', response);
         if (response.success) {
@@ -147,24 +150,37 @@ const generateQuestions = async () => {
 // 从模板生成报告
 const generateReportFromTemplate = async () => {
     if (selectedQuestions.value.length === 0) {
-        console.warn('请选择问题');
+        ElMessage.warning('请选择问题');
+        return;
+    }
+    // 如果用户没有选择数据源，提示用户选择
+    if (!selectedDatasource.value) {
+        ElMessage.warning('请选择数据源');
         return;
     }
     console.log('开始生成报告，选择的问题:', selectedQuestions.value);
+    console.log('选择的数据源:', selectedDatasource.value);
     isGeneratingReport.value = true;
     try {
+        // 解析选中的数据源
+        const datasource = JSON.parse(selectedDatasource.value);
         const response = await dataAgentApi.generateReportFromTemplate({
             name: `报告_${new Date().toLocaleDateString()}`,
-            questions: selectedQuestions.value
+            questions: selectedQuestions.value,
+            datasource_id: datasource.id,
+            datasource_name: datasource.name,
+            datasource_type: datasource.type,
         });
         console.log('生成报告响应:', response);
         generatedReport.value = response;
         console.log('报告生成成功');
+        ElMessage.success('报告生成成功');
         // 刷新报告列表
         await loadReports();
     }
     catch (error) {
         console.error('生成报告错误:', error);
+        ElMessage.error('生成报告失败');
     }
     finally {
         isGeneratingReport.value = false;
@@ -200,14 +216,18 @@ const loadChatRecords = async () => {
                             const parts = [];
                             if (record.analysis) {
                                 try {
-                                    const analysisObj = typeof record.analysis === 'string' ? JSON.parse(record.analysis) : record.analysis;
+                                    const analysisObj = typeof record.analysis === 'string'
+                                        ? JSON.parse(record.analysis)
+                                        : record.analysis;
                                     const reportContent = analysisObj.content || analysisObj.report || '';
                                     if (reportContent) {
                                         parts.push(`报告: ${reportContent.substring(0, 100)}${reportContent.length > 100 ? '...' : ''}`);
                                     }
                                 }
-                                catch (e) {
-                                    const analysisStr = typeof record.analysis === 'string' ? record.analysis : JSON.stringify(record.analysis);
+                                catch {
+                                    const analysisStr = typeof record.analysis === 'string'
+                                        ? record.analysis
+                                        : JSON.stringify(record.analysis);
                                     parts.push(`报告: ${analysisStr.substring(0, 100)}${analysisStr.length > 100 ? '...' : ''}`);
                                 }
                             }
@@ -217,7 +237,9 @@ const loadChatRecords = async () => {
                             // 智能问数
                             if (record.data) {
                                 const dataObj = typeof record.data === 'string' ? JSON.parse(record.data) : record.data;
-                                if (typeof dataObj === 'object' && Array.isArray(dataObj.data) && dataObj.data.length > 0) {
+                                if (typeof dataObj === 'object' &&
+                                    Array.isArray(dataObj.data) &&
+                                    dataObj.data.length > 0) {
                                     result = '查询成功';
                                 }
                                 else if (Array.isArray(dataObj) && dataObj.length > 0) {
@@ -225,10 +247,14 @@ const loadChatRecords = async () => {
                                 }
                             }
                             if (!result && record.sql_answer) {
-                                result = record.sql_answer.substring(0, 100) + (record.sql_answer.length > 100 ? '...' : '');
+                                result =
+                                    record.sql_answer.substring(0, 100) +
+                                        (record.sql_answer.length > 100 ? '...' : '');
                             }
                             if (!result && record.chart_answer) {
-                                result = record.chart_answer.substring(0, 100) + (record.chart_answer.length > 100 ? '...' : '');
+                                result =
+                                    record.chart_answer.substring(0, 100) +
+                                        (record.chart_answer.length > 100 ? '...' : '');
                             }
                             if (!result) {
                                 return; // 跳过没有结果的记录
@@ -243,7 +269,7 @@ const loadChatRecords = async () => {
                             create_time: record.create_time,
                             finish_time: record.finish_time || '',
                             status: record.finish ? 'completed' : 'processing',
-                            result: result
+                            result: result,
                         });
                     }
                 });
@@ -279,7 +305,9 @@ const viewChatDetail = async (record) => {
                             charts = fullRecord.data.charts;
                         }
                         rawData = fullRecord.data;
-                        if (fullRecord.data.correlation_matrix && Array.isArray(fullRecord.data.correlation_matrix) && fullRecord.data.correlation_matrix.length > 0) {
+                        if (fullRecord.data.correlation_matrix &&
+                            Array.isArray(fullRecord.data.correlation_matrix) &&
+                            fullRecord.data.correlation_matrix.length > 0) {
                             correlationColumns = Object.keys(fullRecord.data.correlation_matrix[0]);
                         }
                     }
@@ -290,7 +318,7 @@ const viewChatDetail = async (record) => {
                                 const analysisObj = JSON.parse(analysisVal);
                                 resultData = { content: analysisObj.content || analysisObj.report || '' };
                             }
-                            catch (e) {
+                            catch {
                                 resultData = { content: analysisVal };
                             }
                         }
@@ -333,7 +361,7 @@ const viewChatDetail = async (record) => {
                     resultType: resultType,
                     rawData: rawData,
                     charts: charts,
-                    correlationColumns: correlationColumns
+                    correlationColumns: correlationColumns,
                 };
             }
             else {
@@ -356,8 +384,9 @@ const deleteChatRecord = (record) => {
     ElMessageBox.confirm('确定要删除这条会话记录吗？', '删除确认', {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
-        type: 'warning'
-    }).then(async () => {
+        type: 'warning',
+    })
+        .then(async () => {
         try {
             // 从列表中移除
             chatRecords.value = chatRecords.value.filter((r) => r.id !== record.id);
@@ -369,7 +398,8 @@ const deleteChatRecord = (record) => {
             ElMessage.error('删除失败');
             console.error('删除会话记录错误:', error);
         }
-    }).catch(() => {
+    })
+        .catch(() => {
         // 用户取消删除
     });
 };
@@ -383,7 +413,7 @@ const generateReportFromChats = async () => {
     try {
         const response = await dataAgentApi.generateReportFromChats({
             name: `综合报告_${new Date().toLocaleDateString()}`,
-            chat_record_ids: selectedChatRecords.value
+            chat_record_ids: selectedChatRecords.value,
         });
         generatedReport.value = response;
         ElMessage.success('报告生成成功');
@@ -434,12 +464,19 @@ const deleteReport = (_reportId) => {
 };
 // 渲染Markdown
 const renderMarkdown = (content) => {
+    if (!content)
+        return '';
     return content
         .replace(/^# (.*$)/gim, '<h1>$1</h1>')
         .replace(/^## (.*$)/gim, '<h2>$1</h2>')
         .replace(/^### (.*$)/gim, '<h3>$1</h3>')
         .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
         .replace(/\*(.*?)\*/gim, '<em>$1</em>')
+        .replace(/!\[([^\]]*)\]\(([^)]+)\)/gim, '<img src="$2" alt="$1" style="max-width: 100%; height: auto; margin: 10px 0;" />')
+        .replace(/```(\w+)?\n([\s\S]*?)```/gim, '<pre><code>$2</code></pre>')
+        .replace(/`([^`]+)`/gim, '<code>$1</code>')
+        .replace(/^- (.*$)/gim, '<li>$1</li>')
+        .replace(/^(\d+)\. (.*$)/gim, '<li>$1. $2</li>')
         .replace(/\n/gim, '<br>');
 };
 // 加载报告列表
@@ -452,10 +489,22 @@ const loadReports = async () => {
         console.error('加载报告失败:', error);
     }
 };
+// 加载数据源列表
+const loadDatasourceList = async () => {
+    try {
+        const response = await dataAgentApi.getDatasources();
+        datasourceList.value = response;
+        console.log('数据源列表:', datasourceList.value);
+    }
+    catch (error) {
+        console.error('加载数据源列表失败:', error);
+    }
+};
 // 页面加载时获取数据
 onMounted(async () => {
     await loadReports();
     await loadChatRecords();
+    await loadDatasourceList();
 });
 debugger; /* PartiallyEnd: #3632/scriptSetup.vue */
 const __VLS_ctx = {};
@@ -463,6 +512,9 @@ let __VLS_components;
 let __VLS_directives;
 /** @type {__VLS_StyleScopedClasses['upload-area']} */ ;
 /** @type {__VLS_StyleScopedClasses['upload-area']} */ ;
+/** @type {__VLS_StyleScopedClasses['question-item']} */ ;
+/** @type {__VLS_StyleScopedClasses['question-item']} */ ;
+/** @type {__VLS_StyleScopedClasses['question-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['question-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['chat-actions']} */ ;
 /** @type {__VLS_StyleScopedClasses['custom-green-btn']} */ ;
@@ -736,6 +788,118 @@ if (__VLS_ctx.activeTab === 'template') {
         (__VLS_ctx.parsedFocusContent);
         var __VLS_63;
     }
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "datasource-section" },
+    });
+    const __VLS_64 = {}.ElDivider;
+    /** @type {[typeof __VLS_components.ElDivider, typeof __VLS_components.elDivider, typeof __VLS_components.ElDivider, typeof __VLS_components.elDivider, ]} */ ;
+    // @ts-ignore
+    const __VLS_65 = __VLS_asFunctionalComponent(__VLS_64, new __VLS_64({
+        contentPosition: "left",
+    }));
+    const __VLS_66 = __VLS_65({
+        contentPosition: "left",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_65));
+    __VLS_67.slots.default;
+    var __VLS_67;
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "datasource-selector" },
+    });
+    const __VLS_68 = {}.ElSelect;
+    /** @type {[typeof __VLS_components.ElSelect, typeof __VLS_components.elSelect, typeof __VLS_components.ElSelect, typeof __VLS_components.elSelect, ]} */ ;
+    // @ts-ignore
+    const __VLS_69 = __VLS_asFunctionalComponent(__VLS_68, new __VLS_68({
+        modelValue: (__VLS_ctx.selectedDatasource),
+        placeholder: "请选择数据源",
+        ...{ class: "datasource-select" },
+    }));
+    const __VLS_70 = __VLS_69({
+        modelValue: (__VLS_ctx.selectedDatasource),
+        placeholder: "请选择数据源",
+        ...{ class: "datasource-select" },
+    }, ...__VLS_functionalComponentArgsRest(__VLS_69));
+    __VLS_71.slots.default;
+    for (const [ds] of __VLS_getVForSourceType((__VLS_ctx.datasourceList))) {
+        const __VLS_72 = {}.ElOption;
+        /** @type {[typeof __VLS_components.ElOption, typeof __VLS_components.elOption, ]} */ ;
+        // @ts-ignore
+        const __VLS_73 = __VLS_asFunctionalComponent(__VLS_72, new __VLS_72({
+            key: (ds.id),
+            label: (`${ds.name} (${ds.type_name})`),
+            value: (JSON.stringify({ id: ds.id, name: ds.name, type: ds.type })),
+        }));
+        const __VLS_74 = __VLS_73({
+            key: (ds.id),
+            label: (`${ds.name} (${ds.type_name})`),
+            value: (JSON.stringify({ id: ds.id, name: ds.name, type: ds.type })),
+        }, ...__VLS_functionalComponentArgsRest(__VLS_73));
+    }
+    var __VLS_71;
+    if (__VLS_ctx.selectedDatasource) {
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+            ...{ class: "selected-datasource-info" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+            ...{ class: "info-label" },
+        });
+        __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
+            ...{ class: "info-value" },
+        });
+        (JSON.parse(__VLS_ctx.selectedDatasource).name);
+    }
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ class: "template-actions" },
+    });
+    const __VLS_76 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_77 = __VLS_asFunctionalComponent(__VLS_76, new __VLS_76({
+        ...{ 'onClick': {} },
+        type: "primary",
+        loading: (__VLS_ctx.isGeneratingQuestions),
+        disabled: (!__VLS_ctx.parsedFocusContent),
+        ...{ class: "action-button" },
+    }));
+    const __VLS_78 = __VLS_77({
+        ...{ 'onClick': {} },
+        type: "primary",
+        loading: (__VLS_ctx.isGeneratingQuestions),
+        disabled: (!__VLS_ctx.parsedFocusContent),
+        ...{ class: "action-button" },
+    }, ...__VLS_functionalComponentArgsRest(__VLS_77));
+    let __VLS_80;
+    let __VLS_81;
+    let __VLS_82;
+    const __VLS_83 = {
+        onClick: (__VLS_ctx.generateQuestions)
+    };
+    __VLS_79.slots.default;
+    (__VLS_ctx.isGeneratingQuestions ? '生成中...' : '生成问题列表');
+    var __VLS_79;
+    const __VLS_84 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_85 = __VLS_asFunctionalComponent(__VLS_84, new __VLS_84({
+        ...{ 'onClick': {} },
+        ...{ class: "custom-green-btn action-button" },
+        loading: (__VLS_ctx.isGeneratingReport),
+        disabled: (__VLS_ctx.selectedQuestions.length === 0),
+    }));
+    const __VLS_86 = __VLS_85({
+        ...{ 'onClick': {} },
+        ...{ class: "custom-green-btn action-button" },
+        loading: (__VLS_ctx.isGeneratingReport),
+        disabled: (__VLS_ctx.selectedQuestions.length === 0),
+    }, ...__VLS_functionalComponentArgsRest(__VLS_85));
+    let __VLS_88;
+    let __VLS_89;
+    let __VLS_90;
+    const __VLS_91 = {
+        onClick: (__VLS_ctx.generateReportFromTemplate)
+    };
+    __VLS_87.slots.default;
+    (__VLS_ctx.isGeneratingReport ? '生成报告中...' : '生成报告');
+    var __VLS_87;
     if (__VLS_ctx.generatedQuestions.length > 0) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ class: "questions-section" },
@@ -746,78 +910,78 @@ if (__VLS_ctx.activeTab === 'template') {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
             ...{ class: "questions-title" },
         });
-        const __VLS_64 = {}.ElButton;
+        const __VLS_92 = {}.ElButton;
         /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
         // @ts-ignore
-        const __VLS_65 = __VLS_asFunctionalComponent(__VLS_64, new __VLS_64({
+        const __VLS_93 = __VLS_asFunctionalComponent(__VLS_92, new __VLS_92({
             ...{ 'onClick': {} },
             size: "small",
             disabled: (__VLS_ctx.selectedQuestions.length === __VLS_ctx.generatedQuestions.length),
         }));
-        const __VLS_66 = __VLS_65({
+        const __VLS_94 = __VLS_93({
             ...{ 'onClick': {} },
             size: "small",
             disabled: (__VLS_ctx.selectedQuestions.length === __VLS_ctx.generatedQuestions.length),
-        }, ...__VLS_functionalComponentArgsRest(__VLS_65));
-        let __VLS_68;
-        let __VLS_69;
-        let __VLS_70;
-        const __VLS_71 = {
+        }, ...__VLS_functionalComponentArgsRest(__VLS_93));
+        let __VLS_96;
+        let __VLS_97;
+        let __VLS_98;
+        const __VLS_99 = {
             onClick: (__VLS_ctx.selectAllQuestions)
         };
-        __VLS_67.slots.default;
-        var __VLS_67;
-        const __VLS_72 = {}.ElButton;
+        __VLS_95.slots.default;
+        var __VLS_95;
+        const __VLS_100 = {}.ElButton;
         /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
         // @ts-ignore
-        const __VLS_73 = __VLS_asFunctionalComponent(__VLS_72, new __VLS_72({
+        const __VLS_101 = __VLS_asFunctionalComponent(__VLS_100, new __VLS_100({
             ...{ 'onClick': {} },
             size: "small",
             disabled: (__VLS_ctx.selectedQuestions.length === 0),
         }));
-        const __VLS_74 = __VLS_73({
+        const __VLS_102 = __VLS_101({
             ...{ 'onClick': {} },
             size: "small",
             disabled: (__VLS_ctx.selectedQuestions.length === 0),
-        }, ...__VLS_functionalComponentArgsRest(__VLS_73));
-        let __VLS_76;
-        let __VLS_77;
-        let __VLS_78;
-        const __VLS_79 = {
+        }, ...__VLS_functionalComponentArgsRest(__VLS_101));
+        let __VLS_104;
+        let __VLS_105;
+        let __VLS_106;
+        const __VLS_107 = {
             onClick: (__VLS_ctx.deselectAllQuestions)
         };
-        __VLS_75.slots.default;
-        var __VLS_75;
+        __VLS_103.slots.default;
+        var __VLS_103;
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ class: "questions-container" },
         });
-        const __VLS_80 = {}.ElCheckboxGroup;
+        const __VLS_108 = {}.ElCheckboxGroup;
         /** @type {[typeof __VLS_components.ElCheckboxGroup, typeof __VLS_components.elCheckboxGroup, typeof __VLS_components.ElCheckboxGroup, typeof __VLS_components.elCheckboxGroup, ]} */ ;
         // @ts-ignore
-        const __VLS_81 = __VLS_asFunctionalComponent(__VLS_80, new __VLS_80({
+        const __VLS_109 = __VLS_asFunctionalComponent(__VLS_108, new __VLS_108({
             modelValue: (__VLS_ctx.selectedQuestions),
             ...{ class: "questions-group" },
         }));
-        const __VLS_82 = __VLS_81({
+        const __VLS_110 = __VLS_109({
             modelValue: (__VLS_ctx.selectedQuestions),
             ...{ class: "questions-group" },
-        }, ...__VLS_functionalComponentArgsRest(__VLS_81));
-        __VLS_83.slots.default;
+        }, ...__VLS_functionalComponentArgsRest(__VLS_109));
+        __VLS_111.slots.default;
         for (const [question, index] of __VLS_getVForSourceType((__VLS_ctx.generatedQuestions))) {
-            const __VLS_84 = {}.ElCheckbox;
+            __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+                key: (index),
+                ...{ class: "question-item" },
+            });
+            const __VLS_112 = {}.ElCheckbox;
             /** @type {[typeof __VLS_components.ElCheckbox, typeof __VLS_components.elCheckbox, typeof __VLS_components.ElCheckbox, typeof __VLS_components.elCheckbox, ]} */ ;
             // @ts-ignore
-            const __VLS_85 = __VLS_asFunctionalComponent(__VLS_84, new __VLS_84({
-                key: (index),
+            const __VLS_113 = __VLS_asFunctionalComponent(__VLS_112, new __VLS_112({
                 label: (question),
-                ...{ class: "question-item" },
             }));
-            const __VLS_86 = __VLS_85({
-                key: (index),
+            const __VLS_114 = __VLS_113({
                 label: (question),
-                ...{ class: "question-item" },
-            }, ...__VLS_functionalComponentArgsRest(__VLS_85));
-            __VLS_87.slots.default;
+            }, ...__VLS_functionalComponentArgsRest(__VLS_113));
+            __VLS_115.slots.default;
             __VLS_asFunctionalElement(__VLS_intrinsicElements.span, __VLS_intrinsicElements.span)({
                 ...{ class: "question-index" },
             });
@@ -826,63 +990,10 @@ if (__VLS_ctx.activeTab === 'template') {
                 ...{ class: "question-text" },
             });
             (question);
-            var __VLS_87;
+            var __VLS_115;
         }
-        var __VLS_83;
+        var __VLS_111;
     }
-    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
-        ...{ class: "template-actions" },
-    });
-    const __VLS_88 = {}.ElButton;
-    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
-    // @ts-ignore
-    const __VLS_89 = __VLS_asFunctionalComponent(__VLS_88, new __VLS_88({
-        ...{ 'onClick': {} },
-        type: "primary",
-        loading: (__VLS_ctx.isGeneratingQuestions),
-        disabled: (!__VLS_ctx.parsedFocusContent),
-        ...{ class: "action-button" },
-    }));
-    const __VLS_90 = __VLS_89({
-        ...{ 'onClick': {} },
-        type: "primary",
-        loading: (__VLS_ctx.isGeneratingQuestions),
-        disabled: (!__VLS_ctx.parsedFocusContent),
-        ...{ class: "action-button" },
-    }, ...__VLS_functionalComponentArgsRest(__VLS_89));
-    let __VLS_92;
-    let __VLS_93;
-    let __VLS_94;
-    const __VLS_95 = {
-        onClick: (__VLS_ctx.generateQuestions)
-    };
-    __VLS_91.slots.default;
-    (__VLS_ctx.isGeneratingQuestions ? '生成中...' : '生成问题列表');
-    var __VLS_91;
-    const __VLS_96 = {}.ElButton;
-    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
-    // @ts-ignore
-    const __VLS_97 = __VLS_asFunctionalComponent(__VLS_96, new __VLS_96({
-        ...{ 'onClick': {} },
-        ...{ class: "custom-green-btn action-button" },
-        loading: (__VLS_ctx.isGeneratingReport),
-        disabled: (__VLS_ctx.selectedQuestions.length === 0),
-    }));
-    const __VLS_98 = __VLS_97({
-        ...{ 'onClick': {} },
-        ...{ class: "custom-green-btn action-button" },
-        loading: (__VLS_ctx.isGeneratingReport),
-        disabled: (__VLS_ctx.selectedQuestions.length === 0),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_97));
-    let __VLS_100;
-    let __VLS_101;
-    let __VLS_102;
-    const __VLS_103 = {
-        onClick: (__VLS_ctx.generateReportFromTemplate)
-    };
-    __VLS_99.slots.default;
-    (__VLS_ctx.isGeneratingReport ? '生成报告中...' : '生成报告');
-    var __VLS_99;
 }
 if (__VLS_ctx.activeTab === 'chat') {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
@@ -891,447 +1002,451 @@ if (__VLS_ctx.activeTab === 'chat') {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "chat-content" },
     });
-    const __VLS_104 = {}.ElDivider;
+    const __VLS_116 = {}.ElDivider;
     /** @type {[typeof __VLS_components.ElDivider, typeof __VLS_components.elDivider, typeof __VLS_components.ElDivider, typeof __VLS_components.elDivider, ]} */ ;
     // @ts-ignore
-    const __VLS_105 = __VLS_asFunctionalComponent(__VLS_104, new __VLS_104({
+    const __VLS_117 = __VLS_asFunctionalComponent(__VLS_116, new __VLS_116({
         contentPosition: "left",
     }));
-    const __VLS_106 = __VLS_105({
+    const __VLS_118 = __VLS_117({
         contentPosition: "left",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_105));
-    __VLS_107.slots.default;
-    var __VLS_107;
+    }, ...__VLS_functionalComponentArgsRest(__VLS_117));
+    __VLS_119.slots.default;
+    var __VLS_119;
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "chat-section" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "table-wrapper" },
     });
-    const __VLS_108 = {}.ElTable;
+    const __VLS_120 = {}.ElTable;
     /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
     // @ts-ignore
-    const __VLS_109 = __VLS_asFunctionalComponent(__VLS_108, new __VLS_108({
-        ...{ 'onSelectionChange': {} },
-        data: (__VLS_ctx.chatRecords),
-        fit: true,
-        rowKey: ((record) => record.id),
-        defaultSort: ({ prop: 'create_time', order: 'descending' }),
-        border: true,
-    }));
-    const __VLS_110 = __VLS_109({
-        ...{ 'onSelectionChange': {} },
-        data: (__VLS_ctx.chatRecords),
-        fit: true,
-        rowKey: ((record) => record.id),
-        defaultSort: ({ prop: 'create_time', order: 'descending' }),
-        border: true,
-    }, ...__VLS_functionalComponentArgsRest(__VLS_109));
-    let __VLS_112;
-    let __VLS_113;
-    let __VLS_114;
-    const __VLS_115 = {
-        onSelectionChange: (__VLS_ctx.handleChatSelectionChange)
-    };
-    __VLS_111.slots.default;
-    const __VLS_116 = {}.ElTableColumn;
-    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-    // @ts-ignore
-    const __VLS_117 = __VLS_asFunctionalComponent(__VLS_116, new __VLS_116({
-        type: "selection",
-        minWidth: "40",
-    }));
-    const __VLS_118 = __VLS_117({
-        type: "selection",
-        minWidth: "40",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_117));
-    const __VLS_120 = {}.ElTableColumn;
-    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-    // @ts-ignore
     const __VLS_121 = __VLS_asFunctionalComponent(__VLS_120, new __VLS_120({
-        prop: "tool",
-        label: "工具类型",
-        minWidth: "90",
+        ...{ 'onSelectionChange': {} },
+        data: (__VLS_ctx.chatRecords),
+        fit: true,
+        rowKey: ((record) => record.id),
+        defaultSort: ({ prop: 'create_time', order: 'descending' }),
+        border: true,
     }));
     const __VLS_122 = __VLS_121({
-        prop: "tool",
-        label: "工具类型",
-        minWidth: "90",
+        ...{ 'onSelectionChange': {} },
+        data: (__VLS_ctx.chatRecords),
+        fit: true,
+        rowKey: ((record) => record.id),
+        defaultSort: ({ prop: 'create_time', order: 'descending' }),
+        border: true,
     }, ...__VLS_functionalComponentArgsRest(__VLS_121));
+    let __VLS_124;
+    let __VLS_125;
+    let __VLS_126;
+    const __VLS_127 = {
+        onSelectionChange: (__VLS_ctx.handleChatSelectionChange)
+    };
     __VLS_123.slots.default;
-    {
-        const { default: __VLS_thisSlot } = __VLS_123.slots;
-        const [scope] = __VLS_getSlotParams(__VLS_thisSlot);
-        const __VLS_124 = {}.ElTag;
-        /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
-        // @ts-ignore
-        const __VLS_125 = __VLS_asFunctionalComponent(__VLS_124, new __VLS_124({
-            type: (scope.row.tool === 'chat' ? 'primary' : 'success'),
-        }));
-        const __VLS_126 = __VLS_125({
-            type: (scope.row.tool === 'chat' ? 'primary' : 'success'),
-        }, ...__VLS_functionalComponentArgsRest(__VLS_125));
-        __VLS_127.slots.default;
-        (scope.row.tool === 'chat' ? '智能问数' : '数据分析');
-        var __VLS_127;
-    }
-    var __VLS_123;
     const __VLS_128 = {}.ElTableColumn;
     /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
     // @ts-ignore
     const __VLS_129 = __VLS_asFunctionalComponent(__VLS_128, new __VLS_128({
-        prop: "question",
-        label: "问题",
-        minWidth: "200",
-        showOverflowTooltip: true,
+        type: "selection",
+        minWidth: "40",
     }));
     const __VLS_130 = __VLS_129({
-        prop: "question",
-        label: "问题",
-        minWidth: "200",
-        showOverflowTooltip: true,
+        type: "selection",
+        minWidth: "40",
     }, ...__VLS_functionalComponentArgsRest(__VLS_129));
     const __VLS_132 = {}.ElTableColumn;
-    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
     // @ts-ignore
     const __VLS_133 = __VLS_asFunctionalComponent(__VLS_132, new __VLS_132({
-        prop: "datasource_name",
-        label: "数据源",
-        minWidth: "100",
+        prop: "tool",
+        label: "工具类型",
+        minWidth: "90",
     }));
     const __VLS_134 = __VLS_133({
-        prop: "datasource_name",
-        label: "数据源",
-        minWidth: "100",
+        prop: "tool",
+        label: "工具类型",
+        minWidth: "90",
     }, ...__VLS_functionalComponentArgsRest(__VLS_133));
-    const __VLS_136 = {}.ElTableColumn;
-    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-    // @ts-ignore
-    const __VLS_137 = __VLS_asFunctionalComponent(__VLS_136, new __VLS_136({
-        prop: "create_time",
-        label: "创建时间",
-        minWidth: "160",
-    }));
-    const __VLS_138 = __VLS_137({
-        prop: "create_time",
-        label: "创建时间",
-        minWidth: "160",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_137));
+    __VLS_135.slots.default;
+    {
+        const { default: __VLS_thisSlot } = __VLS_135.slots;
+        const [scope] = __VLS_getSlotParams(__VLS_thisSlot);
+        const __VLS_136 = {}.ElTag;
+        /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
+        // @ts-ignore
+        const __VLS_137 = __VLS_asFunctionalComponent(__VLS_136, new __VLS_136({
+            type: (scope.row.tool === 'chat' ? 'primary' : 'success'),
+        }));
+        const __VLS_138 = __VLS_137({
+            type: (scope.row.tool === 'chat' ? 'primary' : 'success'),
+        }, ...__VLS_functionalComponentArgsRest(__VLS_137));
+        __VLS_139.slots.default;
+        (scope.row.tool === 'chat' ? '智能问数' : '数据分析');
+        var __VLS_139;
+    }
+    var __VLS_135;
     const __VLS_140 = {}.ElTableColumn;
     /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
     // @ts-ignore
     const __VLS_141 = __VLS_asFunctionalComponent(__VLS_140, new __VLS_140({
-        prop: "finish_time",
-        label: "结束时间",
-        minWidth: "160",
+        prop: "question",
+        label: "问题",
+        minWidth: "200",
+        showOverflowTooltip: true,
     }));
     const __VLS_142 = __VLS_141({
+        prop: "question",
+        label: "问题",
+        minWidth: "200",
+        showOverflowTooltip: true,
+    }, ...__VLS_functionalComponentArgsRest(__VLS_141));
+    const __VLS_144 = {}.ElTableColumn;
+    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+    // @ts-ignore
+    const __VLS_145 = __VLS_asFunctionalComponent(__VLS_144, new __VLS_144({
+        prop: "datasource_name",
+        label: "数据源",
+        minWidth: "100",
+    }));
+    const __VLS_146 = __VLS_145({
+        prop: "datasource_name",
+        label: "数据源",
+        minWidth: "100",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_145));
+    const __VLS_148 = {}.ElTableColumn;
+    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+    // @ts-ignore
+    const __VLS_149 = __VLS_asFunctionalComponent(__VLS_148, new __VLS_148({
+        prop: "create_time",
+        label: "创建时间",
+        minWidth: "160",
+    }));
+    const __VLS_150 = __VLS_149({
+        prop: "create_time",
+        label: "创建时间",
+        minWidth: "160",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_149));
+    const __VLS_152 = {}.ElTableColumn;
+    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+    // @ts-ignore
+    const __VLS_153 = __VLS_asFunctionalComponent(__VLS_152, new __VLS_152({
         prop: "finish_time",
         label: "结束时间",
         minWidth: "160",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_141));
-    const __VLS_144 = {}.ElTableColumn;
-    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-    // @ts-ignore
-    const __VLS_145 = __VLS_asFunctionalComponent(__VLS_144, new __VLS_144({
-        prop: "status",
-        label: "状态",
-        minWidth: "80",
-    }));
-    const __VLS_146 = __VLS_145({
-        prop: "status",
-        label: "状态",
-        minWidth: "80",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_145));
-    __VLS_147.slots.default;
-    {
-        const { default: __VLS_thisSlot } = __VLS_147.slots;
-        const [scope] = __VLS_getSlotParams(__VLS_thisSlot);
-        const __VLS_148 = {}.ElTag;
-        /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
-        // @ts-ignore
-        const __VLS_149 = __VLS_asFunctionalComponent(__VLS_148, new __VLS_148({
-            type: (scope.row.status === 'completed' ? 'success' : 'warning'),
-        }));
-        const __VLS_150 = __VLS_149({
-            type: (scope.row.status === 'completed' ? 'success' : 'warning'),
-        }, ...__VLS_functionalComponentArgsRest(__VLS_149));
-        __VLS_151.slots.default;
-        (scope.row.status === 'completed' ? '已完成' : '处理中');
-        var __VLS_151;
-    }
-    var __VLS_147;
-    const __VLS_152 = {}.ElTableColumn;
-    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-    // @ts-ignore
-    const __VLS_153 = __VLS_asFunctionalComponent(__VLS_152, new __VLS_152({
-        prop: "result",
-        label: "返回结果",
-        minWidth: "150",
-        showOverflowTooltip: true,
     }));
     const __VLS_154 = __VLS_153({
+        prop: "finish_time",
+        label: "结束时间",
+        minWidth: "160",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_153));
+    const __VLS_156 = {}.ElTableColumn;
+    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+    // @ts-ignore
+    const __VLS_157 = __VLS_asFunctionalComponent(__VLS_156, new __VLS_156({
+        prop: "status",
+        label: "状态",
+        minWidth: "80",
+    }));
+    const __VLS_158 = __VLS_157({
+        prop: "status",
+        label: "状态",
+        minWidth: "80",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_157));
+    __VLS_159.slots.default;
+    {
+        const { default: __VLS_thisSlot } = __VLS_159.slots;
+        const [scope] = __VLS_getSlotParams(__VLS_thisSlot);
+        const __VLS_160 = {}.ElTag;
+        /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
+        // @ts-ignore
+        const __VLS_161 = __VLS_asFunctionalComponent(__VLS_160, new __VLS_160({
+            type: (scope.row.status === 'completed' ? 'success' : 'warning'),
+        }));
+        const __VLS_162 = __VLS_161({
+            type: (scope.row.status === 'completed' ? 'success' : 'warning'),
+        }, ...__VLS_functionalComponentArgsRest(__VLS_161));
+        __VLS_163.slots.default;
+        (scope.row.status === 'completed' ? '已完成' : '处理中');
+        var __VLS_163;
+    }
+    var __VLS_159;
+    const __VLS_164 = {}.ElTableColumn;
+    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+    // @ts-ignore
+    const __VLS_165 = __VLS_asFunctionalComponent(__VLS_164, new __VLS_164({
         prop: "result",
         label: "返回结果",
         minWidth: "150",
         showOverflowTooltip: true,
-    }, ...__VLS_functionalComponentArgsRest(__VLS_153));
-    __VLS_155.slots.default;
+    }));
+    const __VLS_166 = __VLS_165({
+        prop: "result",
+        label: "返回结果",
+        minWidth: "150",
+        showOverflowTooltip: true,
+    }, ...__VLS_functionalComponentArgsRest(__VLS_165));
+    __VLS_167.slots.default;
     {
-        const { default: __VLS_thisSlot } = __VLS_155.slots;
+        const { default: __VLS_thisSlot } = __VLS_167.slots;
         const [scope] = __VLS_getSlotParams(__VLS_thisSlot);
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ class: (scope.row.result === '失败' ? 'result-failed' : 'result-content') },
         });
         (scope.row.result);
     }
-    var __VLS_155;
-    const __VLS_156 = {}.ElTableColumn;
+    var __VLS_167;
+    const __VLS_168 = {}.ElTableColumn;
     /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
     // @ts-ignore
-    const __VLS_157 = __VLS_asFunctionalComponent(__VLS_156, new __VLS_156({
+    const __VLS_169 = __VLS_asFunctionalComponent(__VLS_168, new __VLS_168({
         label: "操作",
         minWidth: "140",
     }));
-    const __VLS_158 = __VLS_157({
+    const __VLS_170 = __VLS_169({
         label: "操作",
         minWidth: "140",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_157));
-    __VLS_159.slots.default;
+    }, ...__VLS_functionalComponentArgsRest(__VLS_169));
+    __VLS_171.slots.default;
     {
-        const { default: __VLS_thisSlot } = __VLS_159.slots;
+        const { default: __VLS_thisSlot } = __VLS_171.slots;
         const [scope] = __VLS_getSlotParams(__VLS_thisSlot);
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
             ...{ class: "table-operate" },
         });
-        const __VLS_160 = {}.ElButton;
+        const __VLS_172 = {}.ElButton;
         /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
         // @ts-ignore
-        const __VLS_161 = __VLS_asFunctionalComponent(__VLS_160, new __VLS_160({
+        const __VLS_173 = __VLS_asFunctionalComponent(__VLS_172, new __VLS_172({
             ...{ 'onClick': {} },
             size: "small",
             ...{ class: "custom-green-btn" },
             ...{ style: {} },
         }));
-        const __VLS_162 = __VLS_161({
+        const __VLS_174 = __VLS_173({
             ...{ 'onClick': {} },
             size: "small",
             ...{ class: "custom-green-btn" },
             ...{ style: {} },
-        }, ...__VLS_functionalComponentArgsRest(__VLS_161));
-        let __VLS_164;
-        let __VLS_165;
-        let __VLS_166;
-        const __VLS_167 = {
+        }, ...__VLS_functionalComponentArgsRest(__VLS_173));
+        let __VLS_176;
+        let __VLS_177;
+        let __VLS_178;
+        const __VLS_179 = {
             onClick: (...[$event]) => {
                 if (!(__VLS_ctx.activeTab === 'chat'))
                     return;
                 __VLS_ctx.viewChatDetail(scope.row);
             }
         };
-        __VLS_163.slots.default;
-        var __VLS_163;
-        const __VLS_168 = {}.ElButton;
+        __VLS_175.slots.default;
+        var __VLS_175;
+        const __VLS_180 = {}.ElButton;
         /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
         // @ts-ignore
-        const __VLS_169 = __VLS_asFunctionalComponent(__VLS_168, new __VLS_168({
+        const __VLS_181 = __VLS_asFunctionalComponent(__VLS_180, new __VLS_180({
             ...{ 'onClick': {} },
             size: "small",
             type: "danger",
         }));
-        const __VLS_170 = __VLS_169({
+        const __VLS_182 = __VLS_181({
             ...{ 'onClick': {} },
             size: "small",
             type: "danger",
-        }, ...__VLS_functionalComponentArgsRest(__VLS_169));
-        let __VLS_172;
-        let __VLS_173;
-        let __VLS_174;
-        const __VLS_175 = {
+        }, ...__VLS_functionalComponentArgsRest(__VLS_181));
+        let __VLS_184;
+        let __VLS_185;
+        let __VLS_186;
+        const __VLS_187 = {
             onClick: (...[$event]) => {
                 if (!(__VLS_ctx.activeTab === 'chat'))
                     return;
                 __VLS_ctx.deleteChatRecord(scope.row);
             }
         };
-        __VLS_171.slots.default;
-        var __VLS_171;
+        __VLS_183.slots.default;
+        var __VLS_183;
     }
-    var __VLS_159;
-    var __VLS_111;
+    var __VLS_171;
+    var __VLS_123;
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "chat-actions" },
     });
-    const __VLS_176 = {}.ElButton;
+    const __VLS_188 = {}.ElButton;
     /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
     // @ts-ignore
-    const __VLS_177 = __VLS_asFunctionalComponent(__VLS_176, new __VLS_176({
+    const __VLS_189 = __VLS_asFunctionalComponent(__VLS_188, new __VLS_188({
         ...{ 'onClick': {} },
         ...{ class: "custom-green-btn" },
         loading: (__VLS_ctx.isGeneratingReport),
         disabled: (__VLS_ctx.selectedChatRecords.length === 0),
     }));
-    const __VLS_178 = __VLS_177({
+    const __VLS_190 = __VLS_189({
         ...{ 'onClick': {} },
         ...{ class: "custom-green-btn" },
         loading: (__VLS_ctx.isGeneratingReport),
         disabled: (__VLS_ctx.selectedChatRecords.length === 0),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_177));
-    let __VLS_180;
-    let __VLS_181;
-    let __VLS_182;
-    const __VLS_183 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_189));
+    let __VLS_192;
+    let __VLS_193;
+    let __VLS_194;
+    const __VLS_195 = {
         onClick: (__VLS_ctx.generateReportFromChats)
     };
-    __VLS_179.slots.default;
-    (__VLS_ctx.isGeneratingReport ? '生成报告中...' : `生成综合报告 (已选${__VLS_ctx.selectedChatRecords.length}条)`);
-    var __VLS_179;
+    __VLS_191.slots.default;
+    (__VLS_ctx.isGeneratingReport
+        ? '生成报告中...'
+        : `生成综合报告 (已选${__VLS_ctx.selectedChatRecords.length}条)`);
+    var __VLS_191;
 }
-const __VLS_184 = {}.ElDialog;
+const __VLS_196 = {}.ElDialog;
 /** @type {[typeof __VLS_components.ElDialog, typeof __VLS_components.elDialog, typeof __VLS_components.ElDialog, typeof __VLS_components.elDialog, ]} */ ;
 // @ts-ignore
-const __VLS_185 = __VLS_asFunctionalComponent(__VLS_184, new __VLS_184({
+const __VLS_197 = __VLS_asFunctionalComponent(__VLS_196, new __VLS_196({
     modelValue: (__VLS_ctx.showChatDetailDialog),
     title: (`查看会话详情 - ${__VLS_ctx.selectedChatDetail?.tool === 'chat' ? '智能问数' : '数据分析'}`),
     width: "80%",
     destroyOnClose: true,
 }));
-const __VLS_186 = __VLS_185({
+const __VLS_198 = __VLS_197({
     modelValue: (__VLS_ctx.showChatDetailDialog),
     title: (`查看会话详情 - ${__VLS_ctx.selectedChatDetail?.tool === 'chat' ? '智能问数' : '数据分析'}`),
     width: "80%",
     destroyOnClose: true,
-}, ...__VLS_functionalComponentArgsRest(__VLS_185));
-__VLS_187.slots.default;
+}, ...__VLS_functionalComponentArgsRest(__VLS_197));
+__VLS_199.slots.default;
 if (__VLS_ctx.selectedChatDetail) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "dialog-section" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({});
-    const __VLS_188 = {}.ElDescriptions;
+    const __VLS_200 = {}.ElDescriptions;
     /** @type {[typeof __VLS_components.ElDescriptions, typeof __VLS_components.elDescriptions, typeof __VLS_components.ElDescriptions, typeof __VLS_components.elDescriptions, ]} */ ;
     // @ts-ignore
-    const __VLS_189 = __VLS_asFunctionalComponent(__VLS_188, new __VLS_188({
-        column: (2),
-        border: true,
-    }));
-    const __VLS_190 = __VLS_189({
-        column: (2),
-        border: true,
-    }, ...__VLS_functionalComponentArgsRest(__VLS_189));
-    __VLS_191.slots.default;
-    const __VLS_192 = {}.ElDescriptionsItem;
-    /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
-    // @ts-ignore
-    const __VLS_193 = __VLS_asFunctionalComponent(__VLS_192, new __VLS_192({
-        label: "会话ID",
-    }));
-    const __VLS_194 = __VLS_193({
-        label: "会话ID",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_193));
-    __VLS_195.slots.default;
-    (__VLS_ctx.selectedChatDetail.id);
-    var __VLS_195;
-    const __VLS_196 = {}.ElDescriptionsItem;
-    /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
-    // @ts-ignore
-    const __VLS_197 = __VLS_asFunctionalComponent(__VLS_196, new __VLS_196({
-        label: "工具类型",
-    }));
-    const __VLS_198 = __VLS_197({
-        label: "工具类型",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_197));
-    __VLS_199.slots.default;
-    (__VLS_ctx.selectedChatDetail.tool === 'chat' ? '智能问数' : '数据分析');
-    var __VLS_199;
-    const __VLS_200 = {}.ElDescriptionsItem;
-    /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
-    // @ts-ignore
     const __VLS_201 = __VLS_asFunctionalComponent(__VLS_200, new __VLS_200({
-        label: "问题",
+        column: (2),
+        border: true,
     }));
     const __VLS_202 = __VLS_201({
-        label: "问题",
+        column: (2),
+        border: true,
     }, ...__VLS_functionalComponentArgsRest(__VLS_201));
     __VLS_203.slots.default;
-    (__VLS_ctx.selectedChatDetail.question);
-    var __VLS_203;
     const __VLS_204 = {}.ElDescriptionsItem;
     /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
     // @ts-ignore
     const __VLS_205 = __VLS_asFunctionalComponent(__VLS_204, new __VLS_204({
-        label: "数据源",
+        label: "会话ID",
     }));
     const __VLS_206 = __VLS_205({
-        label: "数据源",
+        label: "会话ID",
     }, ...__VLS_functionalComponentArgsRest(__VLS_205));
     __VLS_207.slots.default;
-    (__VLS_ctx.selectedChatDetail.datasource_name);
+    (__VLS_ctx.selectedChatDetail.id);
     var __VLS_207;
     const __VLS_208 = {}.ElDescriptionsItem;
     /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
     // @ts-ignore
     const __VLS_209 = __VLS_asFunctionalComponent(__VLS_208, new __VLS_208({
-        label: "创建时间",
+        label: "工具类型",
     }));
     const __VLS_210 = __VLS_209({
-        label: "创建时间",
+        label: "工具类型",
     }, ...__VLS_functionalComponentArgsRest(__VLS_209));
     __VLS_211.slots.default;
-    (__VLS_ctx.selectedChatDetail.create_time);
+    (__VLS_ctx.selectedChatDetail.tool === 'chat' ? '智能问数' : '数据分析');
     var __VLS_211;
     const __VLS_212 = {}.ElDescriptionsItem;
     /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
     // @ts-ignore
     const __VLS_213 = __VLS_asFunctionalComponent(__VLS_212, new __VLS_212({
+        label: "问题",
+    }));
+    const __VLS_214 = __VLS_213({
+        label: "问题",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_213));
+    __VLS_215.slots.default;
+    (__VLS_ctx.selectedChatDetail.question);
+    var __VLS_215;
+    const __VLS_216 = {}.ElDescriptionsItem;
+    /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
+    // @ts-ignore
+    const __VLS_217 = __VLS_asFunctionalComponent(__VLS_216, new __VLS_216({
+        label: "数据源",
+    }));
+    const __VLS_218 = __VLS_217({
+        label: "数据源",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_217));
+    __VLS_219.slots.default;
+    (__VLS_ctx.selectedChatDetail.datasource_name);
+    var __VLS_219;
+    const __VLS_220 = {}.ElDescriptionsItem;
+    /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
+    // @ts-ignore
+    const __VLS_221 = __VLS_asFunctionalComponent(__VLS_220, new __VLS_220({
+        label: "创建时间",
+    }));
+    const __VLS_222 = __VLS_221({
+        label: "创建时间",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_221));
+    __VLS_223.slots.default;
+    (__VLS_ctx.selectedChatDetail.create_time);
+    var __VLS_223;
+    const __VLS_224 = {}.ElDescriptionsItem;
+    /** @type {[typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, typeof __VLS_components.ElDescriptionsItem, typeof __VLS_components.elDescriptionsItem, ]} */ ;
+    // @ts-ignore
+    const __VLS_225 = __VLS_asFunctionalComponent(__VLS_224, new __VLS_224({
         label: "结束时间",
         span: (2),
     }));
-    const __VLS_214 = __VLS_213({
+    const __VLS_226 = __VLS_225({
         label: "结束时间",
         span: (2),
-    }, ...__VLS_functionalComponentArgsRest(__VLS_213));
-    __VLS_215.slots.default;
+    }, ...__VLS_functionalComponentArgsRest(__VLS_225));
+    __VLS_227.slots.default;
     (__VLS_ctx.selectedChatDetail.finish_time || '未完成');
-    var __VLS_215;
-    var __VLS_191;
+    var __VLS_227;
+    var __VLS_203;
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "dialog-section" },
     });
     __VLS_asFunctionalElement(__VLS_intrinsicElements.h3, __VLS_intrinsicElements.h3)({});
-    if (__VLS_ctx.selectedChatDetail.resultType === 'table' && __VLS_ctx.selectedChatDetail.resultData && Array.isArray(__VLS_ctx.selectedChatDetail.resultData)) {
+    if (__VLS_ctx.selectedChatDetail.resultType === 'table' &&
+        __VLS_ctx.selectedChatDetail.resultData &&
+        Array.isArray(__VLS_ctx.selectedChatDetail.resultData)) {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
-        const __VLS_216 = {}.ElTable;
+        const __VLS_228 = {}.ElTable;
         /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
         // @ts-ignore
-        const __VLS_217 = __VLS_asFunctionalComponent(__VLS_216, new __VLS_216({
+        const __VLS_229 = __VLS_asFunctionalComponent(__VLS_228, new __VLS_228({
             data: (__VLS_ctx.selectedChatDetail.resultData),
             ...{ style: {} },
             border: true,
         }));
-        const __VLS_218 = __VLS_217({
+        const __VLS_230 = __VLS_229({
             data: (__VLS_ctx.selectedChatDetail.resultData),
             ...{ style: {} },
             border: true,
-        }, ...__VLS_functionalComponentArgsRest(__VLS_217));
-        __VLS_219.slots.default;
+        }, ...__VLS_functionalComponentArgsRest(__VLS_229));
+        __VLS_231.slots.default;
         for (const [_, key] of __VLS_getVForSourceType((__VLS_ctx.selectedChatDetail.resultData[0]))) {
-            const __VLS_220 = {}.ElTableColumn;
+            const __VLS_232 = {}.ElTableColumn;
             /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
             // @ts-ignore
-            const __VLS_221 = __VLS_asFunctionalComponent(__VLS_220, new __VLS_220({
+            const __VLS_233 = __VLS_asFunctionalComponent(__VLS_232, new __VLS_232({
                 key: (key),
                 prop: (key),
                 label: (key),
             }));
-            const __VLS_222 = __VLS_221({
+            const __VLS_234 = __VLS_233({
                 key: (key),
                 prop: (key),
                 label: (key),
-            }, ...__VLS_functionalComponentArgsRest(__VLS_221));
+            }, ...__VLS_functionalComponentArgsRest(__VLS_233));
         }
-        var __VLS_219;
+        var __VLS_231;
     }
     else if (__VLS_ctx.selectedChatDetail.resultType === 'analysis') {
         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
@@ -1344,48 +1459,49 @@ if (__VLS_ctx.selectedChatDetail) {
                     ...{ class: "correlation-result" },
                 });
                 __VLS_asFunctionalElement(__VLS_intrinsicElements.h4, __VLS_intrinsicElements.h4)({});
-                const __VLS_224 = {}.ElTable;
+                const __VLS_236 = {}.ElTable;
                 /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
                 // @ts-ignore
-                const __VLS_225 = __VLS_asFunctionalComponent(__VLS_224, new __VLS_224({
+                const __VLS_237 = __VLS_asFunctionalComponent(__VLS_236, new __VLS_236({
                     data: (__VLS_ctx.selectedChatDetail.rawData.correlation_matrix),
                     border: true,
                 }));
-                const __VLS_226 = __VLS_225({
+                const __VLS_238 = __VLS_237({
                     data: (__VLS_ctx.selectedChatDetail.rawData.correlation_matrix),
                     border: true,
-                }, ...__VLS_functionalComponentArgsRest(__VLS_225));
-                __VLS_227.slots.default;
-                const __VLS_228 = {}.ElTableColumn;
+                }, ...__VLS_functionalComponentArgsRest(__VLS_237));
+                __VLS_239.slots.default;
+                const __VLS_240 = {}.ElTableColumn;
                 /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
                 // @ts-ignore
-                const __VLS_229 = __VLS_asFunctionalComponent(__VLS_228, new __VLS_228({
+                const __VLS_241 = __VLS_asFunctionalComponent(__VLS_240, new __VLS_240({
                     prop: "column",
                     label: "列名",
                     width: "120",
                 }));
-                const __VLS_230 = __VLS_229({
+                const __VLS_242 = __VLS_241({
                     prop: "column",
                     label: "列名",
                     width: "120",
-                }, ...__VLS_functionalComponentArgsRest(__VLS_229));
+                }, ...__VLS_functionalComponentArgsRest(__VLS_241));
                 for (const [col] of __VLS_getVForSourceType((__VLS_ctx.selectedChatDetail.correlationColumns))) {
-                    const __VLS_232 = {}.ElTableColumn;
+                    const __VLS_244 = {}.ElTableColumn;
                     /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
                     // @ts-ignore
-                    const __VLS_233 = __VLS_asFunctionalComponent(__VLS_232, new __VLS_232({
+                    const __VLS_245 = __VLS_asFunctionalComponent(__VLS_244, new __VLS_244({
                         key: (col),
                         prop: (col),
                         label: (col),
                     }));
-                    const __VLS_234 = __VLS_233({
+                    const __VLS_246 = __VLS_245({
                         key: (col),
                         prop: (col),
                         label: (col),
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_233));
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_245));
                 }
-                var __VLS_227;
-                if (__VLS_ctx.selectedChatDetail.rawData.charts && __VLS_ctx.selectedChatDetail.rawData.charts.correlation_matrix) {
+                var __VLS_239;
+                if (__VLS_ctx.selectedChatDetail.rawData.charts &&
+                    __VLS_ctx.selectedChatDetail.rawData.charts.correlation_matrix) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
                         ...{ class: "chart-container" },
                     });
@@ -1407,35 +1523,36 @@ if (__VLS_ctx.selectedChatDetail) {
                     });
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.h5, __VLS_intrinsicElements.h5)({});
                     (column);
-                    const __VLS_236 = {}.ElTable;
+                    const __VLS_248 = {}.ElTable;
                     /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
                     // @ts-ignore
-                    const __VLS_237 = __VLS_asFunctionalComponent(__VLS_236, new __VLS_236({
+                    const __VLS_249 = __VLS_asFunctionalComponent(__VLS_248, new __VLS_248({
                         data: ([stats]),
                         border: true,
                     }));
-                    const __VLS_238 = __VLS_237({
+                    const __VLS_250 = __VLS_249({
                         data: ([stats]),
                         border: true,
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_237));
-                    __VLS_239.slots.default;
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_249));
+                    __VLS_251.slots.default;
                     for (const [_, key] of __VLS_getVForSourceType((stats))) {
-                        const __VLS_240 = {}.ElTableColumn;
+                        const __VLS_252 = {}.ElTableColumn;
                         /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
                         // @ts-ignore
-                        const __VLS_241 = __VLS_asFunctionalComponent(__VLS_240, new __VLS_240({
+                        const __VLS_253 = __VLS_asFunctionalComponent(__VLS_252, new __VLS_252({
                             key: (key),
                             prop: (key),
                             label: (key),
                         }));
-                        const __VLS_242 = __VLS_241({
+                        const __VLS_254 = __VLS_253({
                             key: (key),
                             prop: (key),
                             label: (key),
-                        }, ...__VLS_functionalComponentArgsRest(__VLS_241));
+                        }, ...__VLS_functionalComponentArgsRest(__VLS_253));
                     }
-                    var __VLS_239;
-                    if (__VLS_ctx.selectedChatDetail.rawData.charts && __VLS_ctx.selectedChatDetail.rawData.charts[column]) {
+                    var __VLS_251;
+                    if (__VLS_ctx.selectedChatDetail.rawData.charts &&
+                        __VLS_ctx.selectedChatDetail.rawData.charts[column]) {
                         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
                             ...{ class: "chart-container" },
                         });
@@ -1455,86 +1572,87 @@ if (__VLS_ctx.selectedChatDetail) {
                 if (__VLS_ctx.selectedChatDetail.rawData.clusters.centers) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.h5, __VLS_intrinsicElements.h5)({});
-                    const __VLS_244 = {}.ElTable;
+                    const __VLS_256 = {}.ElTable;
                     /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
                     // @ts-ignore
-                    const __VLS_245 = __VLS_asFunctionalComponent(__VLS_244, new __VLS_244({
+                    const __VLS_257 = __VLS_asFunctionalComponent(__VLS_256, new __VLS_256({
                         data: (__VLS_ctx.selectedChatDetail.rawData.clusters.centers),
                         border: true,
                     }));
-                    const __VLS_246 = __VLS_245({
+                    const __VLS_258 = __VLS_257({
                         data: (__VLS_ctx.selectedChatDetail.rawData.clusters.centers),
                         border: true,
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_245));
-                    __VLS_247.slots.default;
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_257));
+                    __VLS_259.slots.default;
                     for (const [key] of __VLS_getVForSourceType((Object.keys(__VLS_ctx.selectedChatDetail.rawData.clusters.centers[0] || {})))) {
-                        const __VLS_248 = {}.ElTableColumn;
+                        const __VLS_260 = {}.ElTableColumn;
                         /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
                         // @ts-ignore
-                        const __VLS_249 = __VLS_asFunctionalComponent(__VLS_248, new __VLS_248({
+                        const __VLS_261 = __VLS_asFunctionalComponent(__VLS_260, new __VLS_260({
                             key: (key),
                             prop: (key),
                             label: (key),
                         }));
-                        const __VLS_250 = __VLS_249({
+                        const __VLS_262 = __VLS_261({
                             key: (key),
                             prop: (key),
                             label: (key),
-                        }, ...__VLS_functionalComponentArgsRest(__VLS_249));
+                        }, ...__VLS_functionalComponentArgsRest(__VLS_261));
                     }
-                    var __VLS_247;
+                    var __VLS_259;
                 }
                 if (__VLS_ctx.selectedChatDetail.rawData.clusters.counts) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.h5, __VLS_intrinsicElements.h5)({});
-                    const __VLS_252 = {}.ElTable;
+                    const __VLS_264 = {}.ElTable;
                     /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
                     // @ts-ignore
-                    const __VLS_253 = __VLS_asFunctionalComponent(__VLS_252, new __VLS_252({
-                        data: (__VLS_ctx.selectedChatDetail.rawData.clusters.counts),
-                        border: true,
-                    }));
-                    const __VLS_254 = __VLS_253({
-                        data: (__VLS_ctx.selectedChatDetail.rawData.clusters.counts),
-                        border: true,
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_253));
-                    __VLS_255.slots.default;
-                    const __VLS_256 = {}.ElTableColumn;
-                    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-                    // @ts-ignore
-                    const __VLS_257 = __VLS_asFunctionalComponent(__VLS_256, new __VLS_256({
-                        prop: "cluster",
-                        label: "簇",
-                    }));
-                    const __VLS_258 = __VLS_257({
-                        prop: "cluster",
-                        label: "簇",
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_257));
-                    const __VLS_260 = {}.ElTableColumn;
-                    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-                    // @ts-ignore
-                    const __VLS_261 = __VLS_asFunctionalComponent(__VLS_260, new __VLS_260({
-                        prop: "count",
-                        label: "数量",
-                    }));
-                    const __VLS_262 = __VLS_261({
-                        prop: "count",
-                        label: "数量",
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_261));
-                    const __VLS_264 = {}.ElTableColumn;
-                    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-                    // @ts-ignore
                     const __VLS_265 = __VLS_asFunctionalComponent(__VLS_264, new __VLS_264({
-                        prop: "percentage",
-                        label: "占比",
+                        data: (__VLS_ctx.selectedChatDetail.rawData.clusters.counts),
+                        border: true,
                     }));
                     const __VLS_266 = __VLS_265({
+                        data: (__VLS_ctx.selectedChatDetail.rawData.clusters.counts),
+                        border: true,
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_265));
+                    __VLS_267.slots.default;
+                    const __VLS_268 = {}.ElTableColumn;
+                    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+                    // @ts-ignore
+                    const __VLS_269 = __VLS_asFunctionalComponent(__VLS_268, new __VLS_268({
+                        prop: "cluster",
+                        label: "簇",
+                    }));
+                    const __VLS_270 = __VLS_269({
+                        prop: "cluster",
+                        label: "簇",
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_269));
+                    const __VLS_272 = {}.ElTableColumn;
+                    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+                    // @ts-ignore
+                    const __VLS_273 = __VLS_asFunctionalComponent(__VLS_272, new __VLS_272({
+                        prop: "count",
+                        label: "数量",
+                    }));
+                    const __VLS_274 = __VLS_273({
+                        prop: "count",
+                        label: "数量",
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_273));
+                    const __VLS_276 = {}.ElTableColumn;
+                    /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+                    // @ts-ignore
+                    const __VLS_277 = __VLS_asFunctionalComponent(__VLS_276, new __VLS_276({
                         prop: "percentage",
                         label: "占比",
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_265));
-                    var __VLS_255;
+                    }));
+                    const __VLS_278 = __VLS_277({
+                        prop: "percentage",
+                        label: "占比",
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_277));
+                    var __VLS_267;
                 }
-                if (__VLS_ctx.selectedChatDetail.rawData.charts && __VLS_ctx.selectedChatDetail.rawData.charts.cluster_plot) {
+                if (__VLS_ctx.selectedChatDetail.rawData.charts &&
+                    __VLS_ctx.selectedChatDetail.rawData.charts.cluster_plot) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
                         src: (__VLS_ctx.selectedChatDetail.rawData.charts.cluster_plot),
@@ -1555,43 +1673,44 @@ if (__VLS_ctx.selectedChatDetail) {
                 if (__VLS_ctx.selectedChatDetail.rawData.regression.coefficients) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.h5, __VLS_intrinsicElements.h5)({});
-                    const __VLS_268 = {}.ElTable;
+                    const __VLS_280 = {}.ElTable;
                     /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
                     // @ts-ignore
-                    const __VLS_269 = __VLS_asFunctionalComponent(__VLS_268, new __VLS_268({
+                    const __VLS_281 = __VLS_asFunctionalComponent(__VLS_280, new __VLS_280({
                         data: (__VLS_ctx.selectedChatDetail.rawData.regression.coefficients),
                         border: true,
                     }));
-                    const __VLS_270 = __VLS_269({
+                    const __VLS_282 = __VLS_281({
                         data: (__VLS_ctx.selectedChatDetail.rawData.regression.coefficients),
                         border: true,
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_269));
-                    __VLS_271.slots.default;
-                    const __VLS_272 = {}.ElTableColumn;
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_281));
+                    __VLS_283.slots.default;
+                    const __VLS_284 = {}.ElTableColumn;
                     /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
                     // @ts-ignore
-                    const __VLS_273 = __VLS_asFunctionalComponent(__VLS_272, new __VLS_272({
+                    const __VLS_285 = __VLS_asFunctionalComponent(__VLS_284, new __VLS_284({
                         prop: "feature",
                         label: "特征",
                     }));
-                    const __VLS_274 = __VLS_273({
+                    const __VLS_286 = __VLS_285({
                         prop: "feature",
                         label: "特征",
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_273));
-                    const __VLS_276 = {}.ElTableColumn;
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_285));
+                    const __VLS_288 = {}.ElTableColumn;
                     /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
                     // @ts-ignore
-                    const __VLS_277 = __VLS_asFunctionalComponent(__VLS_276, new __VLS_276({
+                    const __VLS_289 = __VLS_asFunctionalComponent(__VLS_288, new __VLS_288({
                         prop: "coefficient",
                         label: "系数",
                     }));
-                    const __VLS_278 = __VLS_277({
+                    const __VLS_290 = __VLS_289({
                         prop: "coefficient",
                         label: "系数",
-                    }, ...__VLS_functionalComponentArgsRest(__VLS_277));
-                    var __VLS_271;
+                    }, ...__VLS_functionalComponentArgsRest(__VLS_289));
+                    var __VLS_283;
                 }
-                if (__VLS_ctx.selectedChatDetail.rawData.charts && __VLS_ctx.selectedChatDetail.rawData.charts.regression_plot) {
+                if (__VLS_ctx.selectedChatDetail.rawData.charts &&
+                    __VLS_ctx.selectedChatDetail.rawData.charts.regression_plot) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
                         src: (__VLS_ctx.selectedChatDetail.rawData.charts.regression_plot),
@@ -1617,7 +1736,8 @@ if (__VLS_ctx.selectedChatDetail) {
                     (anomaly.lower_bound);
                     (anomaly.upper_bound);
                 }
-                if (__VLS_ctx.selectedChatDetail.rawData.charts && __VLS_ctx.selectedChatDetail.rawData.charts.anomaly_plot) {
+                if (__VLS_ctx.selectedChatDetail.rawData.charts &&
+                    __VLS_ctx.selectedChatDetail.rawData.charts.anomaly_plot) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
                         src: (__VLS_ctx.selectedChatDetail.rawData.charts.anomaly_plot),
@@ -1640,36 +1760,37 @@ if (__VLS_ctx.selectedChatDetail) {
                     if (dist.quantiles) {
                         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                         __VLS_asFunctionalElement(__VLS_intrinsicElements.h6, __VLS_intrinsicElements.h6)({});
-                        const __VLS_280 = {}.ElTable;
+                        const __VLS_292 = {}.ElTable;
                         /** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
                         // @ts-ignore
-                        const __VLS_281 = __VLS_asFunctionalComponent(__VLS_280, new __VLS_280({
+                        const __VLS_293 = __VLS_asFunctionalComponent(__VLS_292, new __VLS_292({
                             data: ([dist.quantiles]),
                             border: true,
                         }));
-                        const __VLS_282 = __VLS_281({
+                        const __VLS_294 = __VLS_293({
                             data: ([dist.quantiles]),
                             border: true,
-                        }, ...__VLS_functionalComponentArgsRest(__VLS_281));
-                        __VLS_283.slots.default;
+                        }, ...__VLS_functionalComponentArgsRest(__VLS_293));
+                        __VLS_295.slots.default;
                         for (const [_, key] of __VLS_getVForSourceType((dist.quantiles))) {
-                            const __VLS_284 = {}.ElTableColumn;
+                            const __VLS_296 = {}.ElTableColumn;
                             /** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
                             // @ts-ignore
-                            const __VLS_285 = __VLS_asFunctionalComponent(__VLS_284, new __VLS_284({
+                            const __VLS_297 = __VLS_asFunctionalComponent(__VLS_296, new __VLS_296({
                                 key: (key),
                                 prop: (key),
                                 label: (`${key}分位数`),
                             }));
-                            const __VLS_286 = __VLS_285({
+                            const __VLS_298 = __VLS_297({
                                 key: (key),
                                 prop: (key),
                                 label: (`${key}分位数`),
-                            }, ...__VLS_functionalComponentArgsRest(__VLS_285));
+                            }, ...__VLS_functionalComponentArgsRest(__VLS_297));
                         }
-                        var __VLS_283;
+                        var __VLS_295;
                     }
-                    if (__VLS_ctx.selectedChatDetail.rawData.charts && __VLS_ctx.selectedChatDetail.rawData.charts[column]) {
+                    if (__VLS_ctx.selectedChatDetail.rawData.charts &&
+                        __VLS_ctx.selectedChatDetail.rawData.charts[column]) {
                         __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                         __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
                             src: (__VLS_ctx.selectedChatDetail.rawData.charts[column]),
@@ -1684,7 +1805,8 @@ if (__VLS_ctx.selectedChatDetail) {
                     ...{ class: "trend-result" },
                 });
                 __VLS_asFunctionalElement(__VLS_intrinsicElements.h4, __VLS_intrinsicElements.h4)({});
-                if (__VLS_ctx.selectedChatDetail.rawData.charts && __VLS_ctx.selectedChatDetail.rawData.charts.trend_plot) {
+                if (__VLS_ctx.selectedChatDetail.rawData.charts &&
+                    __VLS_ctx.selectedChatDetail.rawData.charts.trend_plot) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
                         src: (__VLS_ctx.selectedChatDetail.rawData.charts.trend_plot),
@@ -1702,7 +1824,8 @@ if (__VLS_ctx.selectedChatDetail) {
                 (__VLS_ctx.selectedChatDetail.rawData.time_series.mean);
                 __VLS_asFunctionalElement(__VLS_intrinsicElements.p, __VLS_intrinsicElements.p)({});
                 (__VLS_ctx.selectedChatDetail.rawData.time_series.std);
-                if (__VLS_ctx.selectedChatDetail.rawData.charts && __VLS_ctx.selectedChatDetail.rawData.charts.time_series_plot) {
+                if (__VLS_ctx.selectedChatDetail.rawData.charts &&
+                    __VLS_ctx.selectedChatDetail.rawData.charts.time_series_plot) {
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({});
                     __VLS_asFunctionalElement(__VLS_intrinsicElements.img)({
                         src: (__VLS_ctx.selectedChatDetail.rawData.charts.time_series_plot),
@@ -1739,32 +1862,32 @@ if (__VLS_ctx.selectedChatDetail) {
         });
     }
 }
-var __VLS_187;
+var __VLS_199;
 if (__VLS_ctx.generatedReport) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "generated-report" },
     });
-    const __VLS_288 = {}.ElDivider;
+    const __VLS_300 = {}.ElDivider;
     /** @type {[typeof __VLS_components.ElDivider, typeof __VLS_components.elDivider, typeof __VLS_components.ElDivider, typeof __VLS_components.elDivider, ]} */ ;
     // @ts-ignore
-    const __VLS_289 = __VLS_asFunctionalComponent(__VLS_288, new __VLS_288({
+    const __VLS_301 = __VLS_asFunctionalComponent(__VLS_300, new __VLS_300({
         contentPosition: "left",
     }));
-    const __VLS_290 = __VLS_289({
+    const __VLS_302 = __VLS_301({
         contentPosition: "left",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_289));
-    __VLS_291.slots.default;
-    var __VLS_291;
-    const __VLS_292 = {}.ElCard;
+    }, ...__VLS_functionalComponentArgsRest(__VLS_301));
+    __VLS_303.slots.default;
+    var __VLS_303;
+    const __VLS_304 = {}.ElCard;
     /** @type {[typeof __VLS_components.ElCard, typeof __VLS_components.elCard, typeof __VLS_components.ElCard, typeof __VLS_components.elCard, ]} */ ;
     // @ts-ignore
-    const __VLS_293 = __VLS_asFunctionalComponent(__VLS_292, new __VLS_292({
+    const __VLS_305 = __VLS_asFunctionalComponent(__VLS_304, new __VLS_304({
         ...{ class: "report-content" },
     }));
-    const __VLS_294 = __VLS_293({
+    const __VLS_306 = __VLS_305({
         ...{ class: "report-content" },
-    }, ...__VLS_functionalComponentArgsRest(__VLS_293));
-    __VLS_295.slots.default;
+    }, ...__VLS_functionalComponentArgsRest(__VLS_305));
+    __VLS_307.slots.default;
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "report-header" },
     });
@@ -1781,168 +1904,216 @@ if (__VLS_ctx.generatedReport) {
     __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
         ...{ class: "report-actions" },
     });
-    const __VLS_296 = {}.ElButton;
+    const __VLS_308 = {}.ElButton;
     /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
     // @ts-ignore
-    const __VLS_297 = __VLS_asFunctionalComponent(__VLS_296, new __VLS_296({
+    const __VLS_309 = __VLS_asFunctionalComponent(__VLS_308, new __VLS_308({
         ...{ 'onClick': {} },
         type: "primary",
     }));
-    const __VLS_298 = __VLS_297({
+    const __VLS_310 = __VLS_309({
         ...{ 'onClick': {} },
         type: "primary",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_297));
-    let __VLS_300;
-    let __VLS_301;
-    let __VLS_302;
-    const __VLS_303 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_309));
+    let __VLS_312;
+    let __VLS_313;
+    let __VLS_314;
+    const __VLS_315 = {
         onClick: (__VLS_ctx.editReport)
     };
-    __VLS_299.slots.default;
-    var __VLS_299;
-    const __VLS_304 = {}.ElButton;
+    __VLS_311.slots.default;
+    var __VLS_311;
+    const __VLS_316 = {}.ElButton;
     /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
     // @ts-ignore
-    const __VLS_305 = __VLS_asFunctionalComponent(__VLS_304, new __VLS_304({
+    const __VLS_317 = __VLS_asFunctionalComponent(__VLS_316, new __VLS_316({
         ...{ 'onClick': {} },
     }));
-    const __VLS_306 = __VLS_305({
+    const __VLS_318 = __VLS_317({
         ...{ 'onClick': {} },
-    }, ...__VLS_functionalComponentArgsRest(__VLS_305));
-    let __VLS_308;
-    let __VLS_309;
-    let __VLS_310;
-    const __VLS_311 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_317));
+    let __VLS_320;
+    let __VLS_321;
+    let __VLS_322;
+    const __VLS_323 = {
         onClick: (__VLS_ctx.downloadReport)
     };
-    __VLS_307.slots.default;
+    __VLS_319.slots.default;
+    var __VLS_319;
     var __VLS_307;
-    var __VLS_295;
 }
-const __VLS_312 = {}.ElDivider;
+const __VLS_324 = {}.ElDivider;
 /** @type {[typeof __VLS_components.ElDivider, typeof __VLS_components.elDivider, typeof __VLS_components.ElDivider, typeof __VLS_components.elDivider, ]} */ ;
 // @ts-ignore
-const __VLS_313 = __VLS_asFunctionalComponent(__VLS_312, new __VLS_312({
-    contentPosition: "left",
-}));
-const __VLS_314 = __VLS_313({
-    contentPosition: "left",
-}, ...__VLS_functionalComponentArgsRest(__VLS_313));
-__VLS_315.slots.default;
-var __VLS_315;
-const __VLS_316 = {}.ElTable;
-/** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
-// @ts-ignore
-const __VLS_317 = __VLS_asFunctionalComponent(__VLS_316, new __VLS_316({
-    data: (__VLS_ctx.reports),
-    ...{ style: {} },
-}));
-const __VLS_318 = __VLS_317({
-    data: (__VLS_ctx.reports),
-    ...{ style: {} },
-}, ...__VLS_functionalComponentArgsRest(__VLS_317));
-__VLS_319.slots.default;
-const __VLS_320 = {}.ElTableColumn;
-/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-// @ts-ignore
-const __VLS_321 = __VLS_asFunctionalComponent(__VLS_320, new __VLS_320({
-    prop: "name",
-    label: "名称",
-    width: "200",
-}));
-const __VLS_322 = __VLS_321({
-    prop: "name",
-    label: "名称",
-    width: "200",
-}, ...__VLS_functionalComponentArgsRest(__VLS_321));
-const __VLS_324 = {}.ElTableColumn;
-/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
-// @ts-ignore
 const __VLS_325 = __VLS_asFunctionalComponent(__VLS_324, new __VLS_324({
-    prop: "create_time",
-    label: "创建时间",
-    width: "180",
+    contentPosition: "left",
 }));
 const __VLS_326 = __VLS_325({
-    prop: "create_time",
-    label: "创建时间",
-    width: "180",
+    contentPosition: "left",
 }, ...__VLS_functionalComponentArgsRest(__VLS_325));
-const __VLS_328 = {}.ElTableColumn;
-/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+__VLS_327.slots.default;
+var __VLS_327;
+__VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+    ...{ class: "reports-table-wrapper" },
+});
+const __VLS_328 = {}.ElTable;
+/** @type {[typeof __VLS_components.ElTable, typeof __VLS_components.elTable, typeof __VLS_components.ElTable, typeof __VLS_components.elTable, ]} */ ;
 // @ts-ignore
 const __VLS_329 = __VLS_asFunctionalComponent(__VLS_328, new __VLS_328({
-    prop: "status",
-    label: "状态",
-    width: "100",
+    data: (__VLS_ctx.reports),
+    ...{ style: {} },
+    border: true,
+    stripe: true,
+    highlightCurrentRow: true,
+    fit: true,
 }));
 const __VLS_330 = __VLS_329({
-    prop: "status",
-    label: "状态",
-    width: "100",
+    data: (__VLS_ctx.reports),
+    ...{ style: {} },
+    border: true,
+    stripe: true,
+    highlightCurrentRow: true,
+    fit: true,
 }, ...__VLS_functionalComponentArgsRest(__VLS_329));
+__VLS_331.slots.default;
 const __VLS_332 = {}.ElTableColumn;
-/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
 // @ts-ignore
 const __VLS_333 = __VLS_asFunctionalComponent(__VLS_332, new __VLS_332({
-    label: "操作",
-    width: "150",
+    prop: "name",
+    label: "名称",
+    minWidth: "200",
+    align: "left",
+    showOverflowTooltip: true,
 }));
 const __VLS_334 = __VLS_333({
-    label: "操作",
-    width: "150",
+    prop: "name",
+    label: "名称",
+    minWidth: "200",
+    align: "left",
+    showOverflowTooltip: true,
 }, ...__VLS_functionalComponentArgsRest(__VLS_333));
-__VLS_335.slots.default;
+const __VLS_336 = {}.ElTableColumn;
+/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+// @ts-ignore
+const __VLS_337 = __VLS_asFunctionalComponent(__VLS_336, new __VLS_336({
+    prop: "create_time",
+    label: "创建时间",
+    minWidth: "160",
+    align: "center",
+    showOverflowTooltip: true,
+}));
+const __VLS_338 = __VLS_337({
+    prop: "create_time",
+    label: "创建时间",
+    minWidth: "160",
+    align: "center",
+    showOverflowTooltip: true,
+}, ...__VLS_functionalComponentArgsRest(__VLS_337));
+const __VLS_340 = {}.ElTableColumn;
+/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+// @ts-ignore
+const __VLS_341 = __VLS_asFunctionalComponent(__VLS_340, new __VLS_340({
+    prop: "status",
+    label: "状态",
+    minWidth: "80",
+    align: "center",
+}));
+const __VLS_342 = __VLS_341({
+    prop: "status",
+    label: "状态",
+    minWidth: "80",
+    align: "center",
+}, ...__VLS_functionalComponentArgsRest(__VLS_341));
+__VLS_343.slots.default;
 {
-    const { default: __VLS_thisSlot } = __VLS_335.slots;
+    const { default: __VLS_thisSlot } = __VLS_343.slots;
     const [scope] = __VLS_getSlotParams(__VLS_thisSlot);
-    const __VLS_336 = {}.ElButton;
-    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    const __VLS_344 = {}.ElTag;
+    /** @type {[typeof __VLS_components.ElTag, typeof __VLS_components.elTag, typeof __VLS_components.ElTag, typeof __VLS_components.elTag, ]} */ ;
     // @ts-ignore
-    const __VLS_337 = __VLS_asFunctionalComponent(__VLS_336, new __VLS_336({
-        ...{ 'onClick': {} },
+    const __VLS_345 = __VLS_asFunctionalComponent(__VLS_344, new __VLS_344({
+        type: (scope.row.status === 'generated' ? 'success' : 'warning'),
         size: "small",
     }));
-    const __VLS_338 = __VLS_337({
+    const __VLS_346 = __VLS_345({
+        type: (scope.row.status === 'generated' ? 'success' : 'warning'),
+        size: "small",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_345));
+    __VLS_347.slots.default;
+    (scope.row.status === 'generated' ? '已生成' : scope.row.status);
+    var __VLS_347;
+}
+var __VLS_343;
+const __VLS_348 = {}.ElTableColumn;
+/** @type {[typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, typeof __VLS_components.ElTableColumn, typeof __VLS_components.elTableColumn, ]} */ ;
+// @ts-ignore
+const __VLS_349 = __VLS_asFunctionalComponent(__VLS_348, new __VLS_348({
+    label: "操作",
+    minWidth: "120",
+    align: "center",
+}));
+const __VLS_350 = __VLS_349({
+    label: "操作",
+    minWidth: "120",
+    align: "center",
+}, ...__VLS_functionalComponentArgsRest(__VLS_349));
+__VLS_351.slots.default;
+{
+    const { default: __VLS_thisSlot } = __VLS_351.slots;
+    const [scope] = __VLS_getSlotParams(__VLS_thisSlot);
+    __VLS_asFunctionalElement(__VLS_intrinsicElements.div, __VLS_intrinsicElements.div)({
+        ...{ style: {} },
+    });
+    const __VLS_352 = {}.ElButton;
+    /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
+    // @ts-ignore
+    const __VLS_353 = __VLS_asFunctionalComponent(__VLS_352, new __VLS_352({
         ...{ 'onClick': {} },
         size: "small",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_337));
-    let __VLS_340;
-    let __VLS_341;
-    let __VLS_342;
-    const __VLS_343 = {
+        type: "primary",
+    }));
+    const __VLS_354 = __VLS_353({
+        ...{ 'onClick': {} },
+        size: "small",
+        type: "primary",
+    }, ...__VLS_functionalComponentArgsRest(__VLS_353));
+    let __VLS_356;
+    let __VLS_357;
+    let __VLS_358;
+    const __VLS_359 = {
         onClick: (...[$event]) => {
             __VLS_ctx.viewReport(scope.row.id);
         }
     };
-    __VLS_339.slots.default;
-    var __VLS_339;
-    const __VLS_344 = {}.ElButton;
+    __VLS_355.slots.default;
+    var __VLS_355;
+    const __VLS_360 = {}.ElButton;
     /** @type {[typeof __VLS_components.ElButton, typeof __VLS_components.elButton, typeof __VLS_components.ElButton, typeof __VLS_components.elButton, ]} */ ;
     // @ts-ignore
-    const __VLS_345 = __VLS_asFunctionalComponent(__VLS_344, new __VLS_344({
+    const __VLS_361 = __VLS_asFunctionalComponent(__VLS_360, new __VLS_360({
         ...{ 'onClick': {} },
         size: "small",
         type: "danger",
     }));
-    const __VLS_346 = __VLS_345({
+    const __VLS_362 = __VLS_361({
         ...{ 'onClick': {} },
         size: "small",
         type: "danger",
-    }, ...__VLS_functionalComponentArgsRest(__VLS_345));
-    let __VLS_348;
-    let __VLS_349;
-    let __VLS_350;
-    const __VLS_351 = {
+    }, ...__VLS_functionalComponentArgsRest(__VLS_361));
+    let __VLS_364;
+    let __VLS_365;
+    let __VLS_366;
+    const __VLS_367 = {
         onClick: (...[$event]) => {
             __VLS_ctx.deleteReport(scope.row.id);
         }
     };
-    __VLS_347.slots.default;
-    var __VLS_347;
+    __VLS_363.slots.default;
+    var __VLS_363;
 }
-var __VLS_335;
-var __VLS_319;
+var __VLS_351;
+var __VLS_331;
 var __VLS_3;
 /** @type {__VLS_StyleScopedClasses['report-container']} */ ;
 /** @type {__VLS_StyleScopedClasses['report-card']} */ ;
@@ -1966,6 +2137,16 @@ var __VLS_3;
 /** @type {__VLS_StyleScopedClasses['clear-button']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus-card']} */ ;
 /** @type {__VLS_StyleScopedClasses['focus-text']} */ ;
+/** @type {__VLS_StyleScopedClasses['datasource-section']} */ ;
+/** @type {__VLS_StyleScopedClasses['datasource-selector']} */ ;
+/** @type {__VLS_StyleScopedClasses['datasource-select']} */ ;
+/** @type {__VLS_StyleScopedClasses['selected-datasource-info']} */ ;
+/** @type {__VLS_StyleScopedClasses['info-label']} */ ;
+/** @type {__VLS_StyleScopedClasses['info-value']} */ ;
+/** @type {__VLS_StyleScopedClasses['template-actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['action-button']} */ ;
+/** @type {__VLS_StyleScopedClasses['custom-green-btn']} */ ;
+/** @type {__VLS_StyleScopedClasses['action-button']} */ ;
 /** @type {__VLS_StyleScopedClasses['questions-section']} */ ;
 /** @type {__VLS_StyleScopedClasses['questions-header']} */ ;
 /** @type {__VLS_StyleScopedClasses['questions-title']} */ ;
@@ -1974,10 +2155,6 @@ var __VLS_3;
 /** @type {__VLS_StyleScopedClasses['question-item']} */ ;
 /** @type {__VLS_StyleScopedClasses['question-index']} */ ;
 /** @type {__VLS_StyleScopedClasses['question-text']} */ ;
-/** @type {__VLS_StyleScopedClasses['template-actions']} */ ;
-/** @type {__VLS_StyleScopedClasses['action-button']} */ ;
-/** @type {__VLS_StyleScopedClasses['custom-green-btn']} */ ;
-/** @type {__VLS_StyleScopedClasses['action-button']} */ ;
 /** @type {__VLS_StyleScopedClasses['chat-summary-container']} */ ;
 /** @type {__VLS_StyleScopedClasses['chat-content']} */ ;
 /** @type {__VLS_StyleScopedClasses['chat-section']} */ ;
@@ -2010,6 +2187,7 @@ var __VLS_3;
 /** @type {__VLS_StyleScopedClasses['report-time']} */ ;
 /** @type {__VLS_StyleScopedClasses['markdown-content']} */ ;
 /** @type {__VLS_StyleScopedClasses['report-actions']} */ ;
+/** @type {__VLS_StyleScopedClasses['reports-table-wrapper']} */ ;
 var __VLS_dollars;
 const __VLS_self = (await import('vue')).defineComponent({
     setup() {
@@ -2031,6 +2209,8 @@ const __VLS_self = (await import('vue')).defineComponent({
             selectedChatDetail: selectedChatDetail,
             isGeneratingReport: isGeneratingReport,
             generatedReport: generatedReport,
+            datasourceList: datasourceList,
+            selectedDatasource: selectedDatasource,
             reports: reports,
             handleDrop: handleDrop,
             handleFileSelect: handleFileSelect,

@@ -201,7 +201,7 @@ const createNewChat = async () => {
 function getChatList(callback) {
     loading.value = true;
     chatApi
-        .list()
+        .list('chat') // 只获取智能问数类型的会话
         .then((res) => {
         chatList.value = chatApi.toChatInfoList(res);
     })

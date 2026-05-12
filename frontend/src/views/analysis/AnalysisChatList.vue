@@ -228,7 +228,7 @@ function onChatRenamed(chat: Chat) {
 const loadChatList = async () => {
   _loading.value = true
   try {
-    const res = await chatApi.list()
+    const res = await chatApi.list('analysis')  // 只获取数据分析类型的会话
     chatList.value = chatApi.toChatInfoList(res)
   } catch (error) {
     console.error('Failed to load chat list:', error)

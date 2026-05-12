@@ -26,7 +26,9 @@ export const dataAgentApi = {
      * @returns 分析结果列表
      */
     getAnalysisResults: (skip = 0, limit = 100) => {
-        return request.get('/data-agent/analysis-results', { params: { skip, limit } });
+        return request.get('/data-agent/analysis-results', {
+            params: { skip, limit },
+        });
     },
     /**
      * 获取分析结果详情
@@ -43,7 +45,9 @@ export const dataAgentApi = {
      * @returns 报告模板列表
      */
     getReportTemplates: (skip = 0, limit = 100) => {
-        return request.get('/data-agent/report-templates', { params: { skip, limit } });
+        return request.get('/data-agent/report-templates', {
+            params: { skip, limit },
+        });
     },
     /**
      * 创建报告

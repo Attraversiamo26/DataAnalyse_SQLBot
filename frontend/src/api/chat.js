@@ -485,8 +485,9 @@ export const chatApi = {
         }
         return new ChatLogHistory(data.start_time, data.finish_time, data.duration, data.total_tokens, toChatLogHistoryItemList(data.steps));
     },
-    list: () => {
-        return request.get('/chat/list');
+    list: (chatType) => {
+        const params = chatType ? `?chat_type=${chatType}` : '';
+        return request.get(`/chat/list${params}`);
     },
     get: (id) => {
         return request.get(`/chat/${id}`);

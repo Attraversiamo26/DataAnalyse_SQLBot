@@ -15,6 +15,11 @@ const toolMenuList = computed(() => [
         meta: { title: '智能助手', iconActive: 'icon_ai', iconDeActive: 'noIcon_ai' },
     },
     {
+        path: '/skill/list',
+        name: 'skill-list',
+        meta: { title: '技能管理', iconActive: 'skill', iconDeActive: 'noSkill' },
+    },
+    {
         path: '/tools/tool-select',
         name: 'tool-select',
         meta: { title: '工具选择', iconActive: 'set', iconDeActive: 'noSet' },
@@ -33,11 +38,6 @@ const toolMenuList = computed(() => [
                 path: '/tools/report',
                 name: 'report',
                 meta: { title: '报告生成', iconActive: 'dashboard', iconDeActive: 'noDashboard' },
-            },
-            {
-                path: '/tools/skill-manager',
-                name: 'skill-manager',
-                meta: { title: '技能管理', iconActive: 'dashboard', iconDeActive: 'noDashboard' },
             },
         ],
     },

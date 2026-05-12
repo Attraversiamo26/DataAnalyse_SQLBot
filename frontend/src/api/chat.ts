@@ -443,8 +443,9 @@ export const chatApi = {
       toChatLogHistoryItemList(data.steps)
     )
   },
-  list: (): Promise<Array<ChatInfo>> => {
-    return request.get('/chat/list')
+  list: (chatType?: string): Promise<Array<ChatInfo>> => {
+    const params = chatType ? `?chat_type=${chatType}` : ''
+    return request.get(`/chat/list${params}`)
   },
   get: (id: number): Promise<ChatInfo> => {
     return request.get(`/chat/${id}`)
